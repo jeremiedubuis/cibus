@@ -1,6 +1,6 @@
 # ADB Remote Installation Guide
 
-This guide details how to build an installable APK for **Cibus** and deploy it to a physical Android device remotely using Android Debug Bridge (ADB) over USB or Wireless Debugging.
+This guide details how to build an installable APK for **Joules** and deploy it to a physical Android device remotely using Android Debug Bridge (ADB) over USB or Wireless Debugging.
 
 ---
 
@@ -116,9 +116,9 @@ adb install -r android/app/build/outputs/apk/debug/app-debug.apk
 | :--- | :--- |
 | **Install / Update App** | `adb install -r android/app/build/outputs/apk/debug/app-debug.apk` |
 | **Install & Auto-Grant Permissions** | `adb install -r -g android/app/build/outputs/apk/debug/app-debug.apk` |
-| **Launch App Remotely** | `adb shell am start -n com.cibusai.nutritiontracker/.MainActivity` |
-| **View Live Logs** | `adb logcat \| grep -i cibus` |
-| **Uninstall App** | `adb uninstall com.cibusai.nutritiontracker` |
+| **Launch App Remotely** | `adb shell am start -n com.joules.tracker/.MainActivity` |
+| **View Live Logs** | `adb logcat \| grep -i joules` |
+| **Uninstall App** | `adb uninstall com.joules.tracker` |
 | **Disconnect Wireless ADB** | `adb disconnect` |
 
 ---
@@ -131,7 +131,7 @@ adb install -r android/app/build/outputs/apk/debug/app-debug.apk
     ```bash
     cd android
     ./gradlew assembleRelease
-    adb uninstall com.cibusai.nutritiontracker
+    adb uninstall com.joules.tracker
     adb -s <DEVICE_ID> install -r app/build/outputs/apk/release/app-release.apk
     ```
   - **Solution for Live Debugging**: Keep `npx expo start` running on your PC and forward the Metro port over ADB:
@@ -144,5 +144,5 @@ adb install -r android/app/build/outputs/apk/debug/app-debug.apk
   - Target running emulator directly: `adb -e install -r <path-to-apk>`
 - **`error: device unauthorized`**: Check your phone screen and tap "Always allow from this computer".
 - **`INSTALL_FAILED_ALREADY_EXISTS`**: Use the `-r` flag with `adb install` to allow reinstalling over an existing version.
-- **`INSTALL_FAILED_UPDATE_INCOMPATIBLE`**: Occurs if switching between Debug and Release signatures. Uninstall the existing version first using `adb uninstall com.cibusai.nutritiontracker`.
+- **`INSTALL_FAILED_UPDATE_INCOMPATIBLE`**: Occurs if switching between Debug and Release signatures. Uninstall the existing version first using `adb uninstall com.joules.tracker`.
 - **Wireless connection drops**: Turn Wireless Debugging OFF and ON again in Developer Options on your phone, then run `adb connect <IP>:<PORT>`.

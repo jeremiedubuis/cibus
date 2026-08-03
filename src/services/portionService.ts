@@ -53,9 +53,47 @@ export function parseServingText(servingText?: string): ParsedServing | null {
 export function getDefaultPortionsForFood(food: FoodItem): PortionOption[] {
   const rawOptions: PortionOption[] = [];
 
+  const nameLower = (food.name || '').toLowerCase();
+  const brandLower = (food.brand || '').toLowerCase();
+  const combinedText = `${nameLower} ${brandLower}`;
+
+  // Explicit solid food classification: meats, poultry, fish, cheeses, breads, cakes, chocolates, etc.
+  const isSolidFood =
+    /\b(jambon|ham|bacon|saucisson|sausage|salami|poulet|chicken|dinde|turkey|viande|meat|boeuf|beef|porc|pork|steak|fromage|cheese|pain|bread|toast|gâteau|cake|tarte|pie|quiche|brioche|chocolat|chocolate|laitue|lettuce|salade|salad|pâtes|pasta|riz|rice|biscuit|cookie)\b/i.test(
+      combinedText
+    );
+
+  // Liquid beverages (must use word boundaries and cannot be solid food)
+  const isLiquid =
+    !isSolidFood &&
+    /\b(lait|milk|jus|juice|eau|water|soda|bière|beer|vin|wine|café|coffee|thé|tea|boisson|drinks?|beverage|smoothie|limonade|cola|cider|cidre)\b/i.test(
+      combinedText
+    );
+
+  const isSliceable =
+    /\b(pain|bread|toast|slice|tranche|pizza|cheese|fromage|gâteau|cake|tarte|pie|quiche|brioche|jambon|ham|bacon)\b/i.test(
+      combinedText
+    );
+
+  const isYogurtPot = /\b(yaourt|yoghurt|yogurt|skyr|faisselle|fromage blanc)\b/i.test(combinedText);
+
+  const isPackagedUnit =
+    isYogurtPot ||
+    /\b(pomme|apple|banane|banana|oeuf|egg|barre|bar|biscuit|cookie|avocat|avocado|orange|citron|lemon)\b/i.test(
+      combinedText
+    );
+
+  const liquidUnitNames = ['glass', 'verre', 'bottle', 'bouteille', 'can', 'cannette'];
+
   // 1. Existing food.portions if already populated
   if (food.portions && food.portions.length > 0) {
-    food.portions.forEach((p) => rawOptions.push(p));
+    food.portions.forEach((p) => {
+      const u = (p.unitName || '').toLowerCase();
+      if (isSolidFood && liquidUnitNames.includes(u)) {
+        return; // Skip invalid liquid suggestion for solid item
+      }
+      rawOptions.push(p);
+    });
   }
 
   // 2. Parsed dataset / OFF serving size if available
@@ -63,38 +101,19 @@ export function getDefaultPortionsForFood(food: FoodItem): PortionOption[] {
     const parsed = parseServingText(food.servingName);
     if (parsed && parsed.gramWeight) {
       const unit = parsed.unitName || 'portion';
-      rawOptions.push({
-        id: `parsed_${unit}`,
-        label: parsed.label || `1 ${unit} (${parsed.gramWeight}g)`,
-        gramWeight: parsed.gramWeight,
-        unitName: unit,
-      });
+      const uLower = unit.toLowerCase();
+      if (!isSolidFood || !liquidUnitNames.includes(uLower)) {
+        rawOptions.push({
+          id: `parsed_${unit}`,
+          label: parsed.label || `1 ${unit} (${parsed.gramWeight}g)`,
+          gramWeight: parsed.gramWeight,
+          unitName: unit,
+        });
+      }
     }
   }
 
-  const nameLower = (food.name || '').toLowerCase();
-  const brandLower = (food.brand || '').toLowerCase();
-  const combinedText = `${nameLower} ${brandLower}`;
-
   // 3. Category / Name Heuristic Portions
-  const isLiquid =
-    /lait|milk|jus|juice|eau|water|soda|bière|beer|vin|wine|café|coffee|thé|tea|boisson|drink|beverage|smoothie|limonade|cola/i.test(
-      combinedText
-    );
-
-  const isSliceable =
-    /pain|bread|toast|slice|pizza|cheese|fromage|gâteau|cake|tarte|pie|quiche|brioche|jambon|ham|bacon/i.test(
-      combinedText
-    );
-
-  const isYogurtPot = /yaourt|yoghurt|yogurt|skyr|faisselle|fromage blanc/i.test(combinedText);
-
-  const isPackagedUnit =
-    isYogurtPot ||
-    /pomme|apple|banane|banana|oeuf|egg|barre|bar|biscuit|cookie|avocat|avocado|orange|citron|lemon/i.test(
-      combinedText
-    );
-
   if (isLiquid) {
     rawOptions.push({
       id: 'glass',
@@ -214,4 +233,56 @@ export function deduplicatePortions(options: PortionOption[]): PortionOption[] {
 export function calculateGramsFromPortion(portion: PortionOption, quantity: number): number {
   if (!portion || isNaN(quantity) || quantity <= 0) return 0;
   return Math.max(0, Math.round(portion.gramWeight * quantity * 10) / 10);
+}
+
+/**
+ * Formats a localized display label for a PortionOption (e.g. "1 tranche (35g)", "1 glass (200g)")
+ */
+export function getLocalizedPortionLabel(
+  portion: PortionOption,
+  t: (key: string, options?: any) => string
+): string {
+  if (!portion) return '';
+
+  if (portion.id === 'grams' || portion.unitName === 'g') {
+    return t('logMeal.grams', { defaultValue: 'g' });
+  }
+
+  const unitNameLower = (portion.unitName || '').toLowerCase().trim();
+
+  let unitKey: string | null = null;
+  if (unitNameLower === 'slice' || unitNameLower === 'tranche') {
+    unitKey = 'slice';
+  } else if (unitNameLower === 'glass' || unitNameLower === 'verre') {
+    unitKey = 'glass';
+  } else if (
+    unitNameLower === 'bottle/can' ||
+    unitNameLower === 'can_bottle' ||
+    unitNameLower === 'bottle' ||
+    unitNameLower === 'can' ||
+    unitNameLower === 'bouteille' ||
+    unitNameLower === 'canette'
+  ) {
+    unitKey = 'bottle_can';
+  } else if (unitNameLower === 'pot') {
+    unitKey = 'pot';
+  } else if (unitNameLower === 'unit' || unitNameLower === 'unité') {
+    unitKey = 'unit';
+  } else if (unitNameLower === 'portion') {
+    unitKey = 'portion';
+  }
+
+  const translatedUnit = unitKey
+    ? t(`logMeal.units.${unitKey}`, { defaultValue: portion.unitName || unitKey })
+    : portion.unitName || 'portion';
+
+  if (portion.gramWeight && portion.gramWeight > 0) {
+    return t('logMeal.portionFormat', {
+      defaultValue: `1 ${translatedUnit} (${portion.gramWeight}g)`,
+      unit: translatedUnit,
+      weight: portion.gramWeight,
+    });
+  }
+
+  return translatedUnit;
 }

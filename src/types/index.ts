@@ -8,6 +8,20 @@ export type MealType = 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK';
 
 export type FoodSource = 'OFF_API' | 'OCR_CUSTOM' | 'MANUAL' | 'CIQUAL' | 'SWISS' | 'FINELI';
 
+export type SportActivityType =
+  | 'RUNNING'
+  | 'BICYCLE'
+  | 'SWIMMING'
+  | 'CLIMBING'
+  | 'CALISTHENICS'
+  | 'ELLIPTICAL'
+  | 'WALKING'
+  | 'CROSSFIT'
+  | 'CANICROSS'
+  | 'WEIGHTS';
+
+export type AppTab = 'NUTRITION' | 'ACTIVITIES' | 'SLEEP';
+
 export interface UserProfile {
   id: string;
   weightKg: number;
@@ -26,8 +40,73 @@ export interface UserProfile {
   lunchPct: number;
   dinnerPct: number;
   snackPct: number;
+  defaultWorkoutDurationMinutes?: number;
+  targetSleepMinutes?: number;
   updatedAt: number;
   lastReconciledAt?: number;
+}
+
+export type SleepStageType =
+  | 'AWAKE'
+  | 'LIGHT'
+  | 'DEEP'
+  | 'REM'
+  | 'OUT_OF_BED'
+  | 'SLEEPING'
+  | 'UNKNOWN';
+
+export interface SleepStage {
+  stage: SleepStageType;
+  startTime: string; // ISO string
+  endTime: string; // ISO string
+  durationMinutes: number;
+}
+
+export interface SleepEntry {
+  id: string;
+  date: string; // YYYY-MM-DD (date sleep/wake is assigned to)
+  startTime: string; // ISO string
+  endTime: string; // ISO string
+  durationMinutes: number;
+  qualityScore: number; // 0-100
+  isNap: boolean;
+  deepSleepMinutes?: number;
+  remSleepMinutes?: number;
+  lightSleepMinutes?: number;
+  awakeMinutes?: number;
+  stages?: SleepStage[];
+  healthConnectId?: string | null;
+  source?: 'HEALTH_CONNECT' | 'MANUAL';
+  notes?: string;
+}
+
+export interface HeartRateSample {
+  timestamp: string; // ISO string
+  bpm: number;
+}
+
+export interface HeartRateZones {
+  zone1Minutes: number; // Warm up (<60% max HR)
+  zone2Minutes: number; // Fat Burn (60-70% max HR)
+  zone3Minutes: number; // Aerobic (70-80% max HR)
+  zone4Minutes: number; // Anaerobic (80-90% max HR)
+  zone5Minutes: number; // Maximum / Extreme (90-100% max HR)
+}
+
+export interface ActivityEntry {
+  id: string;
+  date: string; // YYYY-MM-DD
+  startTime: string; // ISO string or HH:mm string with date context
+  durationMinutes: number;
+  activityType: SportActivityType;
+  caloriesKcal: number;
+  distanceKm?: number | null;
+  healthConnectId?: string | null;
+  avgHeartRateBpm?: number | null;
+  maxHeartRateBpm?: number | null;
+  minHeartRateBpm?: number | null;
+  heartRateSamples?: HeartRateSample[];
+  heartRateZones?: HeartRateZones;
 }
 
 export interface PortionOption {
@@ -81,8 +160,14 @@ export interface ParsedNutrition {
 }
 
 export interface DailyExpenditure {
+  /** Calories reported by Health Connect activity sources, e.g. workouts. */
+  activityCaloriesKcal: number;
+  /** Estimated walking calories from the deduplicated daily step count. */
+  stepCaloriesKcal: number;
   activeCaloriesKcal: number;
   stepCount: number;
+  regularStepCount: number;
+  activityStepCount: number;
 }
 
 export interface MacroDistribution {

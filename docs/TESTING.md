@@ -1,6 +1,6 @@
-# Comprehensive Testing Guide: Cibus
+# Comprehensive Testing Guide: Joules
 
-This document provides a complete guide for testing the **Cibus** application across automated unit tests, offline operation, Google Health Connect integration, OCR label parsing accuracy, and Google Play Store In-App Updates.
+This document provides a complete guide for testing the **Joules** application across automated unit tests, offline operation, Google Health Connect integration, OCR label parsing accuracy, and Google Play Store In-App Updates.
 
 ---
 
@@ -41,7 +41,7 @@ npm run typecheck
 
 ## 2. Offline Mode Test Procedure
 
-Cibus operates local-first, ensuring 100% functionality without active internet connectivity.
+Joules operates local-first, ensuring 100% functionality without active internet connectivity.
 
 ### Execution Steps
 1. Open the application on an Android test device or emulator.
@@ -66,7 +66,7 @@ Cibus operates local-first, ensuring 100% functionality without active internet 
 ### Step-by-Step Round-Trip Verification
 
 #### A. Write Pipeline (App -> Health Connect)
-1. Launch Cibus (via native dev build `npx expo run:android`) and tap **Allow** when prompted for Health Connect permissions (`READ_NUTRITION`, `WRITE_NUTRITION`, `READ_WEIGHT`, `WRITE_WEIGHT`, `READ_ACTIVE_CALORIES_BURNED`, `READ_STEPS`). *(Note: In non-native environments like Expo Go, permission prompts are bypassed and mock data is used; see ENVIRONMENT_SETUP.md).*
+1. Launch Joules (via native dev build `npx expo run:android`) and tap **Allow** when prompted for Health Connect permissions (`READ_NUTRITION`, `WRITE_NUTRITION`, `READ_WEIGHT`, `WRITE_WEIGHT`, `READ_ACTIVE_CALORIES_BURNED`, `READ_STEPS`). *(Note: In non-native environments like Expo Go, permission prompts are bypassed and mock data is used; see ENVIRONMENT_SETUP.md).*
 2. Log a meal item (e.g., *Grilled Chicken Breast - 200g* containing `330 kcal`, `62g Protein`, `0g Carbs`, `7.2g Fat`).
 3. Open the **Google Health Connect** app or **Health Connect Toolbox**.
 4. Navigate to **Data and access > Nutrition**.
@@ -74,7 +74,7 @@ Cibus operates local-first, ensuring 100% functionality without active internet 
 
 #### B. Read Pipeline (Health Connect -> App)
 1. Open **Health Connect Toolbox** (or Google Fit / Samsung Health) and write a simulated `ActiveCaloriesBurned` record of `350 kcal` and `5,000 steps`.
-2. Return to Cibus and refresh/navigate to the current date.
+2. Return to Joules and refresh/navigate to the current date.
 3. **Verification**:
    - Confirm the **Daily Energy Budget** card displays:
      $$\text{Dynamic Budget} = \text{Base Goal} + 350 \text{ kcal}$$

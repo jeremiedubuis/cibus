@@ -8,6 +8,8 @@ interface EnergyBudgetCardProps {
   activeCaloriesBurned: number;
   consumedCalories: number;
   stepCount: number;
+  regularStepCount?: number;
+  activityStepCount?: number;
   isHealthConnectActive: boolean;
   onConnectHealthConnect?: () => void;
 }
@@ -17,6 +19,8 @@ export const EnergyBudgetCard: React.FC<EnergyBudgetCardProps> = ({
   activeCaloriesBurned,
   consumedCalories,
   stepCount,
+  regularStepCount,
+  activityStepCount,
   isHealthConnectActive,
   onConnectHealthConnect,
 }) => {
@@ -103,7 +107,15 @@ export const EnergyBudgetCard: React.FC<EnergyBudgetCardProps> = ({
 
       {stepCount > 0 && (
         <View style={styles.stepsRow}>
-          <Text style={styles.stepsText}>{t('energyBudget.steps', { count: stepCount.toLocaleString() })}</Text>
+          <Text style={styles.stepsText}>
+            {activityStepCount && activityStepCount > 0
+              ? t('energyBudget.stepsWithActivity', {
+                  count: stepCount.toLocaleString(),
+                  regular: (regularStepCount ?? (stepCount - activityStepCount)).toLocaleString(),
+                  activity: activityStepCount.toLocaleString(),
+                })
+              : t('energyBudget.steps', { count: stepCount.toLocaleString() })}
+          </Text>
         </View>
       )}
     </View>

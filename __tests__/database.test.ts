@@ -2,11 +2,13 @@ import {
   _resetDatabaseState,
   addMealEntry,
   deleteMealEntry,
+  getDisclaimerAccepted,
   getFoodByBarcode,
   getFoodById,
   getMealEntriesByDate,
   getUserProfile,
   initDatabase,
+  saveDisclaimerAccepted,
   saveFoodItem,
   saveUserProfile,
   searchLocalFoods,
@@ -15,10 +17,25 @@ import {
 } from '../src/services/database';
 import { FoodItem } from '../src/types';
 
+const TEST_FOOD: FoodItem = {
+  id: 'food_test_oats',
+  barcode: '030000010204',
+  name: 'Test Rolled Oats',
+  brand: 'Test Brand',
+  servingSizeG: 100,
+  calories100g: 375,
+  proteins100g: 13.3,
+  carbs100g: 66.7,
+  fats100g: 6.7,
+  source: 'MANUAL',
+  createdAt: 0,
+};
+
 describe('Local Database Storage Service', () => {
   beforeEach(async () => {
     _resetDatabaseState();
     await initDatabase();
+    await saveFoodItem(TEST_FOOD);
   });
 
   describe('User Profile Operations', () => {
@@ -55,23 +72,45 @@ describe('Local Database Storage Service', () => {
       expect(updated.goalType).toBe('RECOMP');
       expect(updated.calorieTarget).toBeGreaterThan(2000);
     });
+
+    it('should persist user profile across app re-initializations', async () => {
+      const initialProfile = await getUserProfile();
+      await saveUserProfile({
+        ...initialProfile,
+        weightKg: 92,
+        heightCm: 182,
+        age: 35,
+        targetWeightKg: 85,
+        defaultWorkoutDurationMinutes: 45,
+      });
+
+      // Re-initialize database to simulate app restart
+      await initDatabase();
+
+      const reloadedProfile = await getUserProfile();
+      expect(reloadedProfile.weightKg).toBe(92);
+      expect(reloadedProfile.heightCm).toBe(182);
+      expect(reloadedProfile.age).toBe(35);
+      expect(reloadedProfile.targetWeightKg).toBe(85);
+      expect(reloadedProfile.defaultWorkoutDurationMinutes).toBe(45);
+    });
   });
 
   describe('Master Foods Catalog Operations', () => {
-    it('should retrieve seeded foods by ID and barcode', async () => {
-      const foodById = await getFoodById('food_oatmeal_01');
+    it('should retrieve locally saved foods by ID and barcode', async () => {
+      const foodById = await getFoodById(TEST_FOOD.id);
       expect(foodById).not.toBeNull();
-      expect(foodById?.name).toBe('Whole Grain Rolled Oats');
+      expect(foodById?.name).toBe(TEST_FOOD.name);
 
       const foodByBarcode = await getFoodByBarcode('030000010204');
       expect(foodByBarcode).not.toBeNull();
-      expect(foodByBarcode?.id).toBe('food_oatmeal_01');
+      expect(foodByBarcode?.id).toBe(TEST_FOOD.id);
     });
 
     it('should search local foods by query string', async () => {
-      const matches = await searchLocalFoods('apple');
+      const matches = await searchLocalFoods('oats');
       expect(matches.length).toBeGreaterThan(0);
-      expect(matches[0].name).toContain('Apple');
+      expect(matches[0].name).toContain('Oats');
     });
 
     it('should save custom food items into local catalog', async () => {
@@ -105,7 +144,7 @@ describe('Local Database Storage Service', () => {
       const entry = await addMealEntry({
         date: today,
         mealType: 'BREAKFAST',
-        foodId: 'food_oatmeal_01',
+        foodId: TEST_FOOD.id,
         quantityG: 150,
         calculatedCalories: 562.5,
         calculatedProtein: 20,
@@ -117,7 +156,7 @@ describe('Local Database Storage Service', () => {
 
       const dayEntries = await getMealEntriesByDate(today);
       expect(dayEntries.length).toBe(1);
-      expect(dayEntries[0].food?.name).toBe('Whole Grain Rolled Oats');
+      expect(dayEntries[0].food?.name).toBe(TEST_FOOD.name);
       expect(dayEntries[0].food?.isAdded).toBe(true);
     });
 
@@ -127,7 +166,7 @@ describe('Local Database Storage Service', () => {
       const entry = await addMealEntry({
         date: today,
         mealType: 'LUNCH',
-        foodId: 'food_chicken_02',
+        foodId: TEST_FOOD.id,
         quantityG: 200,
         calculatedCalories: 330,
         calculatedProtein: 62,
@@ -177,7 +216,7 @@ describe('Local Database Storage Service', () => {
       const entry = await addMealEntry({
         date: today,
         mealType: 'SNACK',
-        foodId: 'food_apple_03',
+        foodId: TEST_FOOD.id,
         quantityG: 100,
         calculatedCalories: 52,
         calculatedProtein: 0.3,
@@ -189,6 +228,19 @@ describe('Local Database Storage Service', () => {
 
       const dayEntries = await getMealEntriesByDate(today);
       expect(dayEntries.length).toBe(0);
+    });
+  });
+
+  describe('Disclaimer Acceptance Status Operations', () => {
+    it('should return false by default when disclaimer has not been accepted', async () => {
+      const accepted = await getDisclaimerAccepted();
+      expect(accepted).toBe(false);
+    });
+
+    it('should persist true after saveDisclaimerAccepted is called', async () => {
+      await saveDisclaimerAccepted();
+      const accepted = await getDisclaimerAccepted();
+      expect(accepted).toBe(true);
     });
   });
 });

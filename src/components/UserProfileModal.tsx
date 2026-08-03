@@ -19,6 +19,10 @@ import { COLORS, FONTS } from '../constants/theme';
 interface UserProfileModalProps {
   visible: boolean;
   profile: UserProfile;
+  isNutritionPermissionGranted?: boolean;
+  isActivityPermissionGranted?: boolean;
+  isSleepPermissionGranted?: boolean;
+  onConnectHealthConnect?: () => Promise<void>;
   onClose: () => void;
   onSaveProfile: (updatedProfile: Omit<UserProfile, 'id' | 'updatedAt'>) => void;
 }
@@ -26,6 +30,10 @@ interface UserProfileModalProps {
 export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   visible,
   profile,
+  isNutritionPermissionGranted = false,
+  isActivityPermissionGranted = false,
+  isSleepPermissionGranted = false,
+  onConnectHealthConnect,
   onClose,
   onSaveProfile,
 }) => {
@@ -39,6 +47,12 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   const [sex, setSex] = useState<BiologicalSex>(profile.sex);
   const [activityFactor, setActivityFactor] = useState<ActivityFactor>(profile.activityFactor);
   const [wantMuscleGain, setWantMuscleGain] = useState<boolean>(profile.wantMuscleGain ?? false);
+  const [defaultWorkoutDuration, setDefaultWorkoutDuration] = useState(
+    (profile.defaultWorkoutDurationMinutes ?? 20).toString()
+  );
+  const [targetSleepHours, setTargetSleepHours] = useState(
+    ((profile.targetSleepMinutes ?? 480) / 60).toString()
+  );
   const [breakfastPctStr, setBreakfastPctStr] = useState(
     Math.round((profile.breakfastPct ?? 0.25) * 100).toString()
   );
@@ -60,6 +74,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
     setSex(profile.sex);
     setActivityFactor(profile.activityFactor);
     setWantMuscleGain(profile.wantMuscleGain ?? false);
+    setDefaultWorkoutDuration((profile.defaultWorkoutDurationMinutes ?? 20).toString());
+    setTargetSleepHours(((profile.targetSleepMinutes ?? 480) / 60).toString());
     setBreakfastPctStr(Math.round((profile.breakfastPct ?? 0.25) * 100).toString());
     setLunchPctStr(Math.round((profile.lunchPct ?? 0.35) * 100).toString());
     setDinnerPctStr(Math.round((profile.dinnerPct ?? 0.3) * 100).toString());
@@ -70,6 +86,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   const targetW = parseFloat(targetWeightKg) || w;
   const h = parseFloat(heightCm) || 170;
   const a = parseInt(age, 10) || 25;
+  const defDuration = parseInt(defaultWorkoutDuration, 10) || 20;
 
   const bPct = parseFloat(breakfastPctStr) || 0;
   const lPct = parseFloat(lunchPctStr) || 0;
@@ -101,6 +118,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
       activityFactor,
       goalType: liveTargets.derivedGoalType,
       wantMuscleGain,
+      defaultWorkoutDurationMinutes: defDuration,
+      targetSleepMinutes: Math.max(120, Math.round((parseFloat(targetSleepHours) || 8) * 60)),
       calorieTarget: liveTargets.baseCalorieTarget,
       proteinTargetG: liveTargets.proteinG,
       carbTargetG: liveTargets.carbG,
@@ -117,15 +136,20 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <SafeAreaView style={styles.overlay}>
         <View style={styles.container}>
-          {/* Header */}
-          <View style={styles.header}>
-            <Text style={styles.headerTitle}>{t('userProfile.title')}</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <Text style={styles.closeBtnText}>✕</Text>
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            style={styles.body}
+            contentContainerStyle={styles.bodyContent}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            showsVerticalScrollIndicator={false}
+          >
+            {/* Header */}
+            <View style={styles.header}>
+              <Text style={styles.headerTitle}>{t('userProfile.title')}</Text>
+              <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
+                <Text style={styles.closeBtnText}>✕</Text>
+              </TouchableOpacity>
+            </View>
             {/* Biological Sex */}
             <View style={styles.inputGroup}>
               <Text style={styles.label}>{t('userProfile.sexLabel')}</Text>
@@ -222,6 +246,28 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                   </TouchableOpacity>
                 ))}
               </View>
+            </View>
+
+            {/* Default Workout Duration */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>{t('userProfile.defaultWorkoutDuration')}</Text>
+              <TextInput
+                style={styles.textInput}
+                keyboardType="numeric"
+                value={defaultWorkoutDuration}
+                onChangeText={setDefaultWorkoutDuration}
+              />
+            </View>
+
+            {/* Target Sleep Goal */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>{t('userProfile.targetSleep')}</Text>
+              <TextInput
+                style={styles.textInput}
+                keyboardType="decimal-pad"
+                value={targetSleepHours}
+                onChangeText={setTargetSleepHours}
+              />
             </View>
 
             {/* Objective 2: Gain Muscle Toggle */}
@@ -371,6 +417,54 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               </View>
             </View>
 
+            {/* Health Connect Permissions Section */}
+            {onConnectHealthConnect && (
+              <View style={styles.hcCard}>
+                <Text style={styles.hcCardTitle}>{t('userProfile.healthConnectTitle')}</Text>
+
+                <View style={styles.hcStatusRow}>
+                  <Text style={styles.hcStatusText}>
+                    {t('userProfile.hcStatusNutrition', {
+                      status: isNutritionPermissionGranted
+                        ? t('userProfile.granted')
+                        : t('userProfile.notGranted'),
+                    })}
+                  </Text>
+                  <Text style={styles.hcStatusText}>
+                    {t('userProfile.hcStatusActivity', {
+                      status: isActivityPermissionGranted
+                        ? t('userProfile.granted')
+                        : t('userProfile.notGranted'),
+                    })}
+                  </Text>
+                  <Text style={styles.hcStatusText}>
+                    {t('userProfile.hcStatusSleep', {
+                      status: isSleepPermissionGranted
+                        ? t('userProfile.granted')
+                        : t('userProfile.notGranted'),
+                    })}
+                  </Text>
+                </View>
+
+                <TouchableOpacity
+                  style={styles.retriggerHcBtn}
+                  onPress={onConnectHealthConnect}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.retriggerHcBtnText}>{t('userProfile.retriggerHcBtn')}</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* About & Data Attributions Section */}
+            <View style={styles.aboutCard}>
+              <Text style={styles.aboutTitle}>{t('about.title')}</Text>
+              <Text style={styles.aboutVersion}>{t('about.version')}</Text>
+              <Text style={styles.aboutText}>{t('about.privacyNotice')}</Text>
+              <Text style={[styles.aboutText, { marginTop: 6, color: COLORS.accent }]}>{t('about.disclaimer')}</Text>
+              <Text style={[styles.aboutText, { marginTop: 6 }]}>{t('about.attributions')}</Text>
+            </View>
+
             {/* Save Action Button */}
             <TouchableOpacity
               style={[
@@ -400,6 +494,7 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: COLORS.bgBackground,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 8 : 0,
   },
   container: {
     flex: 1,
@@ -409,10 +504,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingBottom: 16,
+    marginBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.cardBg,
+    borderBottomColor: COLORS.cardBorder,
   },
   headerTitle: {
     color: COLORS.textPrimary,
@@ -430,7 +525,12 @@ const styles = StyleSheet.create({
     fontFamily: FONTS.bold,
   },
   body: {
+    flex: 1,
+  },
+  bodyContent: {
     padding: 20,
+    // Keep the final action clear of the device edge and easy to reach.
+    paddingBottom: 48,
   },
   inputGroup: {
     marginBottom: 16,
@@ -729,5 +829,75 @@ const styles = StyleSheet.create({
   },
   saveBtnTextDisabled: {
     color: COLORS.textMuted,
+  },
+  aboutCard: {
+    backgroundColor: COLORS.cardBg,
+    borderRadius: 14,
+    padding: 14,
+    marginTop: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+  },
+  aboutTitle: {
+    color: COLORS.textPrimary,
+    fontSize: 14,
+    fontWeight: '700',
+    fontFamily: FONTS.bold,
+    marginBottom: 2,
+  },
+  aboutVersion: {
+    color: COLORS.primary,
+    fontSize: 12,
+    fontWeight: '700',
+    fontFamily: FONTS.bold,
+    marginBottom: 8,
+  },
+  aboutText: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    lineHeight: 18,
+    fontFamily: FONTS.medium,
+  },
+  hcCard: {
+    backgroundColor: COLORS.cardBg,
+    borderRadius: 14,
+    padding: 14,
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: COLORS.primaryMuted,
+  },
+  hcCardTitle: {
+    color: COLORS.primary,
+    fontSize: 12,
+    fontWeight: '800',
+    fontFamily: FONTS.extraBold,
+    letterSpacing: 1.2,
+    marginBottom: 8,
+  },
+  hcStatusRow: {
+    gap: 4,
+    marginBottom: 10,
+  },
+  hcStatusText: {
+    color: COLORS.textPrimary,
+    fontSize: 13,
+    fontWeight: '600',
+    fontFamily: FONTS.semibold,
+  },
+  retriggerHcBtn: {
+    backgroundColor: COLORS.primaryMuted,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+  },
+  retriggerHcBtnText: {
+    color: COLORS.primary,
+    fontSize: 13,
+    fontWeight: '800',
+    fontFamily: FONTS.extraBold,
   },
 });

@@ -160,7 +160,19 @@ export function transformOFFProduct(product: any, language?: string): FoodItem {
 }
 
 const barcodeCache = new Map<string, FoodItem | null>();
-const OFF_USER_AGENT = 'CibusAI-NutritionTracker/1.0 (Mobile App; dev@cibus.ai)';
+const OFF_USER_AGENT = 'Joules/1.0 (Android; Mobile App)';
+
+/**
+ * Helper to sanitize raw user query strings for OFF API requests (strips apostrophes and special punctuation)
+ */
+export function sanitizeOFFQuery(query: string): string {
+  return (query || '')
+    .trim()
+    .replace(/['’]/g, '')
+    .replace(/["\-.,\/#!$%\^&\*;:{}=\-_`~()]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
 /**
  * Fetch product details from Open Food Facts API by barcode
@@ -176,6 +188,7 @@ export async function fetchProductByBarcode(barcode: string): Promise<FoodItem |
     const response = await fetch(`${OFF_BASE_URL}/api/v2/product/${encodeURIComponent(code)}.json`, {
       headers: {
         'User-Agent': OFF_USER_AGENT,
+        'Accept': 'application/json',
       },
     });
 
@@ -333,9 +346,13 @@ function getProductScore(
     }
   }
 
-  // 5. Brand match bonus
-  if (normBrand && (normBrand.includes(normQ) || effectiveWords.some((w) => normBrand.includes(w)))) {
-    score += 15;
+  // 5. Brand match bonus (strong boost for brand search intent)
+  if (normBrand && normBrand.length > 0) {
+    if (normBrand.includes(normQ)) {
+      score += 100;
+    } else if (effectiveWords.some((w) => normBrand.includes(w))) {
+      score += 80;
+    }
   }
 
   // 6. Regional / Language match
@@ -380,69 +397,106 @@ export async function searchProductsOFF(
   const q = query.trim();
   if (!q) return [];
 
+  const cleanQ = sanitizeOFFQuery(q);
+  if (!cleanQ) return [];
+
   const localeInfo = getDeviceLocaleInfo();
   const targetLang = (language || localeInfo.language || 'en').toLowerCase();
   const targetCountry = (country || localeInfo.country || 'world').toLowerCase();
 
-  const cacheKey = `${q.toLowerCase()}_${targetCountry}_${targetLang}`;
+  const cacheKey = `${cleanQ.toLowerCase()}_${targetCountry}_${targetLang}`;
   if (searchCache.has(cacheKey)) {
     return searchCache.get(cacheKey)!;
   }
 
+  const reqHeaders = {
+    'User-Agent': OFF_USER_AGENT,
+    'Accept': 'application/json',
+  };
+
   try {
-    // Primary: Modern high-performance Search API endpoint
-    const primaryUrl = `https://search.openfoodfacts.org/search?q=${encodeURIComponent(
-      q
-    )}&fields=code,product_name,brands,nutriments,product_name_en,product_name_${targetLang},countries_tags,languages_tags,serving_size,serving_quantity,serving_quantity_unit&page_size=25&lc=${encodeURIComponent(
-      targetLang
-    )}&cc=${encodeURIComponent(targetCountry)}`;
+    let rawProducts: any[] = [];
 
-    const response = await fetch(primaryUrl, {
-      headers: {
-        'User-Agent': OFF_USER_AGENT,
-      },
-    });
+    // Primary: Official cgi/search.pl search engine (used on world.openfoodfacts.org website)
+    try {
+      const cgiUrl = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(
+        cleanQ
+      )}&search_simple=1&action=process&json=1&page_size=50&lc=${encodeURIComponent(targetLang)}`;
 
-    let data: OFFSearchResponse | null = null;
-
-    if (response.ok) {
-      try {
+      const response = await fetch(cgiUrl, { headers: reqHeaders });
+      if (response.ok) {
         const text = typeof response.text === 'function' ? await response.text() : JSON.stringify(await response.json());
         if (text && text.trim().startsWith('{')) {
-          data = JSON.parse(text);
-        }
-      } catch (e) {
-        // Ignore JSON parse error on non-JSON response
-      }
-    }
-
-    // If primary endpoint failed or returned empty/non-JSON, try fallback endpoint
-    if (!data || (!data.hits && !data.products)) {
-      const fallbackUrl = `https://world.openfoodfacts.org/api/v2/search?q=${encodeURIComponent(
-        q
-      )}&fields=code,product_name,brands,nutriments,product_name_en,product_name_${targetLang},countries_tags,languages_tags&page_size=20&lc=${encodeURIComponent(
-        targetLang
-      )}&cc=${encodeURIComponent(targetCountry)}`;
-
-      const fallbackRes = await fetch(fallbackUrl, {
-        headers: {
-          'User-Agent': OFF_USER_AGENT,
-        },
-      });
-
-      if (fallbackRes.ok) {
-        try {
-          const fbText = typeof fallbackRes.text === 'function' ? await fallbackRes.text() : JSON.stringify(await fallbackRes.json());
-          if (fbText && fbText.trim().startsWith('{')) {
-            data = JSON.parse(fbText);
+          const parsed = JSON.parse(text);
+          const candidateList = parsed.products || parsed.hits;
+          if (Array.isArray(candidateList) && candidateList.length > 0) {
+            rawProducts = candidateList;
           }
-        } catch (e) {
-          // Ignore
         }
       }
+    } catch (err) {
+      // Ignore Primary cgi fetch error and proceed to fallback
     }
 
-    const rawProducts: any[] = (data && (data.hits || data.products)) || [];
+    // Fallback: search.openfoodfacts.org microservice API with multi-pass candidate retrieval
+    if (rawProducts.length === 0) {
+      try {
+        const primaryUrl = `https://search.openfoodfacts.org/search?q=${encodeURIComponent(
+          cleanQ
+        )}&fields=code,product_name,brands,nutriments,product_name_en,product_name_${targetLang},countries_tags,languages_tags,serving_size,serving_quantity,serving_quantity_unit&page_size=50&lc=${encodeURIComponent(
+          targetLang
+        )}&cc=${encodeURIComponent(targetCountry)}`;
+
+        const response = await fetch(primaryUrl, { headers: reqHeaders });
+        let data: OFFSearchResponse | null = null;
+
+        if (response.ok) {
+          const text = typeof response.text === 'function' ? await response.text() : JSON.stringify(await response.json());
+          if (text && text.trim().startsWith('{')) {
+            data = JSON.parse(text);
+          }
+        }
+
+        const hits1 = (data && (data.hits || data.products)) || [];
+
+        // Check if query contains distinctive brand/keyword terms (e.g. "harrys")
+        const keyWords = cleanQ
+          .split(/\s+/)
+          .filter((w) => w.length > 2 && !['pain', 'mie', 'lait', 'eau', 'sans', 'avec', 'nature'].includes(w.toLowerCase()));
+
+        let hits2: any[] = [];
+        if (keyWords.length > 0) {
+          const brandKeyword = keyWords[0];
+          const brandUrl = `https://search.openfoodfacts.org/search?q=${encodeURIComponent(
+            brandKeyword
+          )}&fields=code,product_name,brands,nutriments,product_name_en,product_name_${targetLang},countries_tags,languages_tags,serving_size,serving_quantity,serving_quantity_unit&page_size=50&lc=${encodeURIComponent(
+            targetLang
+          )}&cc=${encodeURIComponent(targetCountry)}`;
+
+          const brandRes = await fetch(brandUrl, { headers: reqHeaders });
+          if (brandRes.ok) {
+            const bText = typeof brandRes.text === 'function' ? await brandRes.text() : JSON.stringify(await brandRes.json());
+            if (bText && bText.trim().startsWith('{')) {
+              const bData = JSON.parse(bText);
+              hits2 = (bData && (bData.hits || bData.products)) || [];
+            }
+          }
+        }
+
+        // Combine and deduplicate candidates by code/_id
+        const combinedMap = new Map<string, any>();
+        [...hits1, ...hits2].forEach((p) => {
+          const id = p._id || p.code;
+          if (id && !combinedMap.has(id)) {
+            combinedMap.set(id, p);
+          }
+        });
+
+        rawProducts = Array.from(combinedMap.values());
+      } catch (err) {
+        // Fallback search error
+      }
+    }
 
     if (Array.isArray(rawProducts) && rawProducts.length > 0) {
       const validProducts = rawProducts.filter(
@@ -450,7 +504,7 @@ export async function searchProductsOFF(
       );
 
       const transformed = validProducts.map((p) => transformOFFProduct(p, targetLang));
-      const sorted = sortProductsByRegion(transformed, rawProducts, q, targetCountry, targetLang);
+      const sorted = sortProductsByRegion(transformed, rawProducts, cleanQ, targetCountry, targetLang);
 
       if (sorted.length > 0) {
         searchCache.set(cacheKey, sorted);

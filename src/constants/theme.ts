@@ -37,12 +37,18 @@ export const COLORS = {
   macroCarbs: '#F59E0B',   // Warm Amber
   macroFat: '#8B5CF6',     // Violet/Purple
   macroCalories: '#F97316',// Warm Orange
+
+  // Compatibility aliases
+  border: '#334155',
+  text: '#F8FAFC',
+  background: '#0B0F19',
 };
 
 export const FONTS = {
   regular: 'PlusJakartaSans_400Regular',
   medium: 'PlusJakartaSans_500Medium',
   semibold: 'PlusJakartaSans_600SemiBold',
+  semiBold: 'PlusJakartaSans_600SemiBold',
   bold: 'PlusJakartaSans_700Bold',
   extraBold: 'PlusJakartaSans_800ExtraBold',
 };

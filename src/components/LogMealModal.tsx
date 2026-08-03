@@ -14,6 +14,7 @@ import { calculateMealItemMacros } from '../services/nutritionCalculator';
 import {
   calculateGramsFromPortion,
   getDefaultPortionsForFood,
+  getLocalizedPortionLabel,
 } from '../services/portionService';
 import { COLORS, FONTS } from '../constants/theme';
 
@@ -47,14 +48,42 @@ export const LogMealModal: React.FC<LogMealModalProps> = ({
     if (food) {
       const options = getDefaultPortionsForFood(food);
       setPortionOptions(options);
+
       if (initialQuantityG && initialQuantityG > 0) {
-        setSelectedPortionId('grams');
-        setCustomGrams(initialQuantityG.toString());
-      } else if (options.length > 0) {
-        setSelectedPortionId(options[0].id);
-        setMultiplier('1');
-        setCustomGrams(options[0].gramWeight.toString());
+        // Find if initialQuantityG matches a portion option in grams (exact or clean multiplier)
+        let matchingPortion: PortionOption | undefined;
+        let matchedMultiplier = 1;
+
+        for (const p of options) {
+          if (p.id === 'grams' || !p.gramWeight || p.gramWeight <= 0) continue;
+
+          // Exact weight match
+          if (Math.abs(p.gramWeight - initialQuantityG) < 0.1) {
+            matchingPortion = p;
+            matchedMultiplier = 1;
+            break;
+          }
+
+          // Clean multiplier match (e.g. 0.5x, 1.5x, 2x, 3x, 4x, 5x)
+          const mult = initialQuantityG / p.gramWeight;
+          if ([0.5, 1.5, 2, 3, 4, 5].some((m) => Math.abs(mult - m) < 0.01)) {
+            matchingPortion = p;
+            matchedMultiplier = Math.round(mult * 100) / 100;
+            break;
+          }
+        }
+
+        if (matchingPortion) {
+          setSelectedPortionId(matchingPortion.id);
+          setMultiplier(matchedMultiplier.toString());
+          setCustomGrams(initialQuantityG.toString());
+        } else {
+          // Precise grams entered previously
+          setSelectedPortionId('grams');
+          setCustomGrams(initialQuantityG.toString());
+        }
       } else {
+        // By default, preselect the 'grams' option
         setSelectedPortionId('grams');
         setCustomGrams('100');
       }
@@ -148,7 +177,7 @@ export const LogMealModal: React.FC<LogMealModalProps> = ({
                       onPress={() => handleSelectPortion(portion)}
                     >
                       <Text style={[styles.portionChipText, isActive && styles.activePortionChipText]}>
-                        {portion.label}
+                        {getLocalizedPortionLabel(portion, t)}
                       </Text>
                     </TouchableOpacity>
                   );
@@ -235,7 +264,7 @@ export const LogMealModal: React.FC<LogMealModalProps> = ({
                   </View>
 
                   <View style={styles.presetsRow}>
-                    {['50', '100', '150', '200', '250'].map((val) => (
+                    {['20', '30', '50', '100', '150'].map((val) => (
                       <TouchableOpacity
                         key={val}
                         style={[styles.presetChip, customGrams === val && styles.activePresetChip]}

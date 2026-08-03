@@ -23,24 +23,38 @@ import {
 } from '@expo-google-fonts/plus-jakarta-sans';
 import './src/i18n';
 import { useTranslation } from 'react-i18next';
-import { FoodItem, MealEntry, MealType, UserProfile } from './src/types';
+import { ActivityEntry, AppTab, FoodItem, MealEntry, MealType, SleepEntry, UserProfile } from './src/types';
 import { COLORS, FONTS } from './src/constants/theme';
 import {
+  addActivityEntry,
   addMealEntry,
+  addSleepEntry,
+  deleteActivityEntry,
   deleteMealEntry,
+  deleteSleepEntry,
+  getActivityEntriesByDate,
+  getDisclaimerAccepted,
   getMealEntriesByDate,
+  getSleepEntriesByDate,
   getUserProfile,
   initDatabase,
+  saveDisclaimerAccepted,
   saveUserProfile,
+  updateActivityEntry,
+  updateActivityHealthConnectId,
   updateMealEntry,
   updateMealHealthConnectId,
+  updateSleepEntry,
 } from './src/services/database';
 import {
+  HealthConnectPermissionStatus,
+  checkHealthConnectGranularPermissions,
   checkHealthConnectPermissionsGranted,
   fetchDailyBurnedMetrics,
   isHealthConnectAvailable,
   reconcileHealthConnectData,
   requestHealthConnectPermissions,
+  syncActivityToHealthConnect,
   syncMealToHealthConnect,
 } from './src/services/healthConnect';
 import { checkAppUpdates, startAppUpdate } from './src/services/inAppUpdates';
@@ -48,9 +62,15 @@ import { DateNavigator } from './src/components/DateNavigator';
 import { EnergyBudgetCard } from './src/components/EnergyBudgetCard';
 import { MacroProgress } from './src/components/MacroProgress';
 import { MealBreakdownCard } from './src/components/MealBreakdownCard';
+import { ActivityBreakdownCard } from './src/components/ActivityBreakdownCard';
+import { SleepBreakdownCard } from './src/components/SleepBreakdownCard';
 import { FoodSearchModal } from './src/components/FoodSearchModal';
 import { LogMealModal } from './src/components/LogMealModal';
+import { LogActivityModal } from './src/components/LogActivityModal';
+import { ActivityDetailModal } from './src/components/ActivityDetailModal';
+import { LogSleepModal } from './src/components/LogSleepModal';
 import { UserProfileModal } from './src/components/UserProfileModal';
+import { DisclaimerModal } from './src/components/DisclaimerModal';
 import { UpdateBanner } from './src/components/UpdateBanner';
 import { LOGO_BASE64 } from './src/assets/logoBase64';
 
@@ -68,19 +88,50 @@ export default function App() {
   const [currentDateStr, setCurrentDateStr] = useState<string>(
     new Date().toISOString().split('T')[0]
   );
+  const [activeTab, setActiveTab] = useState<AppTab>('NUTRITION');
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [mealEntries, setMealEntries] = useState<MealEntry[]>([]);
+  const [activityEntries, setActivityEntries] = useState<ActivityEntry[]>([]);
+  const [sleepEntries, setSleepEntries] = useState<SleepEntry[]>([]);
   const [activeCalories, setActiveCalories] = useState<number>(0);
   const [stepCount, setStepCount] = useState<number>(0);
+  const [regularStepCount, setRegularStepCount] = useState<number>(0);
+  const [activityStepCount, setActivityStepCount] = useState<number>(0);
   const [isHealthConnectActive, setIsHealthConnectActive] = useState<boolean>(false);
+  const [permissionsStatus, setPermissionsStatus] = useState<HealthConnectPermissionStatus>({
+    nutritionGranted: false,
+    activityGranted: false,
+    sleepGranted: false,
+    allGranted: false,
+  });
   const [updateAvailable, setUpdateAvailable] = useState<boolean>(false);
 
   // Modals state
+  const [disclaimerModalVisible, setDisclaimerModalVisible] = useState<boolean>(false);
   const [searchModalVisible, setSearchModalVisible] = useState<boolean>(false);
   const [logModalVisible, setLogModalVisible] = useState<boolean>(false);
   const [profileModalVisible, setProfileModalVisible] = useState<boolean>(false);
+  const [activityModalVisible, setActivityModalVisible] = useState<boolean>(false);
+  const [activityDetailModalVisible, setActivityDetailModalVisible] = useState<boolean>(false);
+  const [selectedDetailActivity, setSelectedDetailActivity] = useState<ActivityEntry | null>(null);
+  const [sleepModalVisible, setSleepModalVisible] = useState<boolean>(false);
   const [activeMealType, setActiveMealType] = useState<MealType>('BREAKFAST');
   const [selectedFood, setSelectedFood] = useState<FoodItem | null>(null);
+  const [editingEntry, setEditingEntry] = useState<MealEntry | null>(null);
+  const [editingActivity, setEditingActivity] = useState<ActivityEntry | null>(null);
+  const [editingSleep, setEditingSleep] = useState<SleepEntry | null>(null);
+
+  const refreshPermissionsStatus = async (): Promise<HealthConnectPermissionStatus> => {
+    const status = await checkHealthConnectGranularPermissions();
+    setPermissionsStatus(status);
+    setIsHealthConnectActive(status.nutritionGranted || status.activityGranted);
+    return status;
+  };
+
+  const handleConfirmDisclaimer = async () => {
+    await saveDisclaimerAccepted();
+    setDisclaimerModalVisible(false);
+  };
 
   // Initial setup
   useEffect(() => {
@@ -89,11 +140,14 @@ export default function App() {
       let userProf = await getUserProfile();
       setProfile(userProf);
 
-      // Check if permissions are already granted on cold launch
-      const isGranted = await checkHealthConnectPermissionsGranted();
-      setIsHealthConnectActive(isGranted);
+      const disclaimerAccepted = await getDisclaimerAccepted();
+      if (!disclaimerAccepted) {
+        setDisclaimerModalVisible(true);
+      }
 
-      if (isGranted) {
+      const status = await refreshPermissionsStatus();
+
+      if (status.nutritionGranted || status.activityGranted) {
         // Run initial reconciliation
         await reconcileHealthConnectData();
         userProf = await getUserProfile();
@@ -113,10 +167,9 @@ export default function App() {
   useEffect(() => {
     const subscription = AppState.addEventListener('change', async (nextAppState: AppStateStatus) => {
       if (nextAppState === 'active') {
-        const isGranted = await checkHealthConnectPermissionsGranted();
-        setIsHealthConnectActive(isGranted);
+        const status = await refreshPermissionsStatus();
 
-        if (isGranted) {
+        if (status.nutritionGranted || status.activityGranted) {
           await reconcileHealthConnectData();
           const freshProf = await getUserProfile();
           setProfile(freshProf);
@@ -124,10 +177,18 @@ export default function App() {
           const entries = await getMealEntriesByDate(currentDateStr);
           setMealEntries(entries);
 
+          const actEntries = await getActivityEntriesByDate(currentDateStr);
+          setActivityEntries(actEntries);
+
+          const slpEntries = await getSleepEntriesByDate(currentDateStr);
+          setSleepEntries(slpEntries);
+
           const targetDate = new Date(currentDateStr);
           const metrics = await fetchDailyBurnedMetrics(targetDate);
           setActiveCalories(metrics.activeCaloriesKcal);
           setStepCount(metrics.stepCount);
+          setRegularStepCount(metrics.regularStepCount);
+          setActivityStepCount(metrics.activityStepCount);
         }
       }
     });
@@ -138,9 +199,9 @@ export default function App() {
   }, [currentDateStr]);
 
   const handleConnectHealthConnect = async () => {
-    const permOk = await requestHealthConnectPermissions();
-    setIsHealthConnectActive(permOk);
-    if (permOk) {
+    await requestHealthConnectPermissions();
+    const status = await refreshPermissionsStatus();
+    if (status.nutritionGranted || status.activityGranted || status.sleepGranted) {
       // Force full week reconciliation on permission grant
       await reconcileHealthConnectData(true);
       const freshProf = await getUserProfile();
@@ -149,10 +210,18 @@ export default function App() {
       const entries = await getMealEntriesByDate(currentDateStr);
       setMealEntries(entries);
 
+      const actEntries = await getActivityEntriesByDate(currentDateStr);
+      setActivityEntries(actEntries);
+
+      const slpEntries = await getSleepEntriesByDate(currentDateStr);
+      setSleepEntries(slpEntries);
+
       const targetDate = new Date(currentDateStr);
       const metrics = await fetchDailyBurnedMetrics(targetDate);
       setActiveCalories(metrics.activeCaloriesKcal);
       setStepCount(metrics.stepCount);
+      setRegularStepCount(metrics.regularStepCount);
+      setActivityStepCount(metrics.activityStepCount);
     }
   };
 
@@ -162,20 +231,27 @@ export default function App() {
       const entries = await getMealEntriesByDate(currentDateStr);
       setMealEntries(entries);
 
+      const actEntries = await getActivityEntriesByDate(currentDateStr);
+      setActivityEntries(actEntries);
+
+      const slpEntries = await getSleepEntriesByDate(currentDateStr);
+      setSleepEntries(slpEntries);
+
       const targetDate = new Date(currentDateStr);
       const metrics = await fetchDailyBurnedMetrics(targetDate);
       setActiveCalories(metrics.activeCaloriesKcal);
       setStepCount(metrics.stepCount);
+      setRegularStepCount(metrics.regularStepCount);
+      setActivityStepCount(metrics.activityStepCount);
     }
     loadDayData();
   }, [currentDateStr, profile]);
-
-  const [editingEntry, setEditingEntry] = useState<MealEntry | null>(null);
 
   const handleDateChange = (newDateStr: string) => {
     setCurrentDateStr(newDateStr);
   };
 
+  // Meal handlers
   const handleOpenSearchModal = (mealType: MealType) => {
     setEditingEntry(null);
     setActiveMealType(mealType);
@@ -265,6 +341,85 @@ export default function App() {
     setMealEntries(updatedEntries);
   };
 
+  // Activity handlers
+  const handleOpenAddActivity = () => {
+    setEditingActivity(null);
+    setActivityModalVisible(true);
+  };
+
+  const handleOpenEditActivity = (entry: ActivityEntry) => {
+    setEditingActivity(entry);
+    setActivityModalVisible(true);
+  };
+
+  const handleConfirmSaveActivity = async (
+    activityData: Omit<ActivityEntry, 'id'>,
+    idToUpdate?: string
+  ) => {
+    if (idToUpdate) {
+      await updateActivityEntry(idToUpdate, activityData);
+      if (activityData.healthConnectId) {
+        await syncActivityToHealthConnect({ ...activityData, id: idToUpdate });
+      }
+    } else {
+      const created = await addActivityEntry(activityData);
+      const hcId = await syncActivityToHealthConnect(created);
+      if (hcId && created.id) {
+        await updateActivityHealthConnectId(created.id, hcId);
+      }
+    }
+
+    const updated = await getActivityEntriesByDate(currentDateStr);
+    setActivityEntries(updated);
+
+    const targetDate = new Date(currentDateStr);
+    const metrics = await fetchDailyBurnedMetrics(targetDate);
+    setActiveCalories(metrics.activeCaloriesKcal);
+    setStepCount(metrics.stepCount);
+    setRegularStepCount(metrics.regularStepCount);
+    setActivityStepCount(metrics.activityStepCount);
+  };
+
+  const handleDeleteActivity = async (activityId: string) => {
+    await deleteActivityEntry(activityId);
+    const updated = await getActivityEntriesByDate(currentDateStr);
+    setActivityEntries(updated);
+
+    const targetDate = new Date(currentDateStr);
+    const metrics = await fetchDailyBurnedMetrics(targetDate);
+    setActiveCalories(metrics.activeCaloriesKcal);
+    setStepCount(metrics.stepCount);
+    setRegularStepCount(metrics.regularStepCount);
+    setActivityStepCount(metrics.activityStepCount);
+  };
+
+  // Sleep handlers
+  const handleOpenAddSleep = () => {
+    setEditingSleep(null);
+    setSleepModalVisible(true);
+  };
+
+  const handleOpenEditSleep = (entry: SleepEntry) => {
+    setEditingSleep(entry);
+    setSleepModalVisible(true);
+  };
+
+  const handleSaveSleepEntry = async (entryData: Omit<SleepEntry, 'id'>, idToUpdate?: string) => {
+    if (idToUpdate) {
+      await updateSleepEntry(idToUpdate, entryData);
+    } else {
+      await addSleepEntry(entryData);
+    }
+    const updated = await getSleepEntriesByDate(currentDateStr);
+    setSleepEntries(updated);
+  };
+
+  const handleDeleteSleepEntry = async (id: string) => {
+    await deleteSleepEntry(id);
+    const updated = await getSleepEntriesByDate(currentDateStr);
+    setSleepEntries(updated);
+  };
+
   const handleSaveProfile = async (updatedData: Omit<UserProfile, 'id' | 'updatedAt'>) => {
     const updatedProf = await saveUserProfile(updatedData);
     setProfile(updatedProf);
@@ -330,6 +485,39 @@ export default function App() {
 
       <UpdateBanner visible={updateAvailable} onStartUpdate={() => startAppUpdate(false)} />
 
+      {/* Global Tab Navigation */}
+      <View style={styles.tabBarContainer}>
+        <TouchableOpacity
+          style={[styles.tabBtn, activeTab === 'NUTRITION' && styles.activeTabBtn]}
+          onPress={() => setActiveTab('NUTRITION')}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.tabBtnText, activeTab === 'NUTRITION' && styles.activeTabBtnText]}>
+            🥗 {t('tabs.nutrition')}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.tabBtn, activeTab === 'ACTIVITIES' && styles.activeTabBtn]}
+          onPress={() => setActiveTab('ACTIVITIES')}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.tabBtnText, activeTab === 'ACTIVITIES' && styles.activeTabBtnText]}>
+            🏃 {t('tabs.activities')}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.tabBtn, activeTab === 'SLEEP' && styles.activeTabBtn]}
+          onPress={() => setActiveTab('SLEEP')}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.tabBtnText, activeTab === 'SLEEP' && styles.activeTabBtnText]}>
+            😴 {t('tabs.sleep')}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
       <ScrollView
         style={styles.mainScrollView}
         contentContainerStyle={{ paddingBottom: 60, flexGrow: 1 }}
@@ -341,60 +529,92 @@ export default function App() {
 
         <EnergyBudgetCard
           baseCalorieTarget={baseTarget}
-          activeCaloriesBurned={activeCalories}
+          activeCaloriesBurned={Math.max(
+            activeCalories,
+            activityEntries.reduce((sum, a) => sum + (a.caloriesKcal || 0), 0)
+          )}
           consumedCalories={totalConsumedCal}
           stepCount={stepCount}
-          isHealthConnectActive={isHealthConnectActive}
+          regularStepCount={regularStepCount}
+          activityStepCount={activityStepCount}
+          isHealthConnectActive={permissionsStatus.nutritionGranted}
           onConnectHealthConnect={handleConnectHealthConnect}
         />
 
-        <MacroProgress
-          proteinConsumedG={totalConsumedProt}
-          proteinTargetG={proteinTarget}
-          carbConsumedG={totalConsumedCarbs}
-          carbTargetG={carbTarget}
-          fatConsumedG={totalConsumedFat}
-          fatTargetG={fatTarget}
-        />
+        {activeTab === 'NUTRITION' ? (
+          <>
+            <MacroProgress
+              proteinConsumedG={totalConsumedProt}
+              proteinTargetG={proteinTarget}
+              carbConsumedG={totalConsumedCarbs}
+              carbTargetG={carbTarget}
+              fatConsumedG={totalConsumedFat}
+              fatTargetG={fatTarget}
+            />
 
-        {/* Meal Breakdown List */}
-        <Text style={styles.sectionHeaderTitle}>{t('mealBreakdown.title')}</Text>
+            {/* Meal Breakdown List */}
+            <Text style={styles.sectionHeaderTitle}>{t('mealBreakdown.title')}</Text>
 
-        <MealBreakdownCard
-          mealType="BREAKFAST"
-          entries={mealEntriesByType.BREAKFAST}
-          targetCalories={breakfastTarget}
-          onAddFood={handleOpenSearchModal}
-          onDeleteEntry={handleDeleteEntry}
-          onEditEntry={handleEditEntry}
-        />
+            <MealBreakdownCard
+              mealType="BREAKFAST"
+              entries={mealEntriesByType.BREAKFAST}
+              targetCalories={breakfastTarget}
+              onAddFood={handleOpenSearchModal}
+              onDeleteEntry={handleDeleteEntry}
+              onEditEntry={handleEditEntry}
+            />
 
-        <MealBreakdownCard
-          mealType="LUNCH"
-          entries={mealEntriesByType.LUNCH}
-          targetCalories={lunchTarget}
-          onAddFood={handleOpenSearchModal}
-          onDeleteEntry={handleDeleteEntry}
-          onEditEntry={handleEditEntry}
-        />
+            <MealBreakdownCard
+              mealType="LUNCH"
+              entries={mealEntriesByType.LUNCH}
+              targetCalories={lunchTarget}
+              onAddFood={handleOpenSearchModal}
+              onDeleteEntry={handleDeleteEntry}
+              onEditEntry={handleEditEntry}
+            />
 
-        <MealBreakdownCard
-          mealType="DINNER"
-          entries={mealEntriesByType.DINNER}
-          targetCalories={dinnerTarget}
-          onAddFood={handleOpenSearchModal}
-          onDeleteEntry={handleDeleteEntry}
-          onEditEntry={handleEditEntry}
-        />
+            <MealBreakdownCard
+              mealType="DINNER"
+              entries={mealEntriesByType.DINNER}
+              targetCalories={dinnerTarget}
+              onAddFood={handleOpenSearchModal}
+              onDeleteEntry={handleDeleteEntry}
+              onEditEntry={handleEditEntry}
+            />
 
-        <MealBreakdownCard
-          mealType="SNACK"
-          entries={mealEntriesByType.SNACK}
-          targetCalories={snackTarget}
-          onAddFood={handleOpenSearchModal}
-          onDeleteEntry={handleDeleteEntry}
-          onEditEntry={handleEditEntry}
-        />
+            <MealBreakdownCard
+              mealType="SNACK"
+              entries={mealEntriesByType.SNACK}
+              targetCalories={snackTarget}
+              onAddFood={handleOpenSearchModal}
+              onDeleteEntry={handleDeleteEntry}
+              onEditEntry={handleEditEntry}
+            />
+          </>
+        ) : activeTab === 'ACTIVITIES' ? (
+          <ActivityBreakdownCard
+            entries={activityEntries}
+            isHealthConnectActive={permissionsStatus.activityGranted}
+            onConnectHealthConnect={handleConnectHealthConnect}
+            onAddActivity={handleOpenAddActivity}
+            onEditActivity={handleOpenEditActivity}
+            onSelectActivity={(activity) => {
+              setSelectedDetailActivity(activity);
+              setActivityDetailModalVisible(true);
+            }}
+            onDeleteActivity={handleDeleteActivity}
+          />
+        ) : (
+          <SleepBreakdownCard
+            sleepEntries={sleepEntries}
+            targetSleepMinutes={profile?.targetSleepMinutes ?? 480}
+            onAddSleep={handleOpenAddSleep}
+            onEditSleep={handleOpenEditSleep}
+            onDeleteSleep={handleDeleteSleepEntry}
+            isHealthConnectActive={permissionsStatus.sleepGranted ?? false}
+            onConnectHealthConnect={handleConnectHealthConnect}
+          />
+        )}
       </ScrollView>
 
       {/* Modals */}
@@ -417,14 +637,62 @@ export default function App() {
         onConfirmLog={handleConfirmLogMeal}
       />
 
+      <LogActivityModal
+        visible={activityModalVisible}
+        activityToEdit={editingActivity}
+        defaultDurationMinutes={profile?.defaultWorkoutDurationMinutes ?? 20}
+        currentDateStr={currentDateStr}
+        onClose={() => {
+          setEditingActivity(null);
+          setActivityModalVisible(false);
+        }}
+        onConfirmSave={handleConfirmSaveActivity}
+        onDeleteActivity={handleDeleteActivity}
+      />
+
+      <ActivityDetailModal
+        visible={activityDetailModalVisible}
+        activity={selectedDetailActivity}
+        userAge={profile?.age ?? 30}
+        onClose={() => {
+          setActivityDetailModalVisible(false);
+          setSelectedDetailActivity(null);
+        }}
+        onEdit={(act) => {
+          setActivityDetailModalVisible(false);
+          handleOpenEditActivity(act);
+        }}
+      />
+
+      <LogSleepModal
+        visible={sleepModalVisible}
+        onClose={() => {
+          setEditingSleep(null);
+          setSleepModalVisible(false);
+        }}
+        onSave={handleSaveSleepEntry}
+        initialEntry={editingSleep}
+        currentDateStr={currentDateStr}
+        targetSleepMinutes={profile?.targetSleepMinutes ?? 480}
+      />
+
       {profile && (
         <UserProfileModal
           visible={profileModalVisible}
           profile={profile}
+          isNutritionPermissionGranted={permissionsStatus.nutritionGranted}
+          isActivityPermissionGranted={permissionsStatus.activityGranted}
+          isSleepPermissionGranted={permissionsStatus.sleepGranted ?? false}
+          onConnectHealthConnect={handleConnectHealthConnect}
           onClose={() => setProfileModalVisible(false)}
           onSaveProfile={handleSaveProfile}
         />
       )}
+
+      <DisclaimerModal
+        visible={disclaimerModalVisible}
+        onConfirm={handleConfirmDisclaimer}
+      />
     </SafeAreaView>
   );
 }
@@ -477,6 +745,35 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     fontFamily: FONTS.bold,
+  },
+  tabBarContainer: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.cardBg,
+    marginHorizontal: 20,
+    marginTop: 12,
+    marginBottom: 4,
+    borderRadius: 14,
+    padding: 4,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+  },
+  tabBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: 10,
+  },
+  activeTabBtn: {
+    backgroundColor: COLORS.primaryDark,
+  },
+  tabBtnText: {
+    color: COLORS.textSecondary,
+    fontSize: 14,
+    fontWeight: '700',
+    fontFamily: FONTS.bold,
+  },
+  activeTabBtnText: {
+    color: '#FFFFFF',
   },
   mainScrollView: {
     flex: 1,

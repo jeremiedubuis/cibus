@@ -167,5 +167,96 @@ describe('Multi-Source Search Prioritization Engine', () => {
 
     expect(harryScore).toBeGreaterThan(genericScore);
   });
-});
 
+  it('matches normalized whole words before applying the source modifier', () => {
+    const matchingItem: FoodItem = {
+      ...offItem,
+      id: 'accented-harrys',
+      name: 'Crème dessert',
+      brand: 'Harrys',
+      source: 'CIQUAL',
+    };
+    const substringOnlyAddedItem: FoodItem = {
+      ...customItem,
+      id: 'substring-only',
+      name: 'Champignon',
+      brand: 'Maison',
+    };
+
+    expect(getFoodItemScore(matchingItem, "creme harry's", 'fr', 'fr'))
+      .toBeGreaterThan(getFoodItemScore(substringOnlyAddedItem, "creme harry's", 'fr', 'fr'));
+  });
+
+  it('should sort previously logged items by most recent log timestamp first', () => {
+    const olderItem: FoodItem = {
+      id: 'item_older',
+      name: 'Greek Yogurt 0%',
+      brand: 'Danone',
+      servingSizeG: 100,
+      calories100g: 50,
+      proteins100g: 10,
+      carbs100g: 4,
+      fats100g: 0,
+      source: 'OFF_API',
+      createdAt: 0,
+      isAdded: true,
+      addedAt: 100000,
+    };
+
+    const recentItem: FoodItem = {
+      id: 'item_recent',
+      name: 'Greek Yogurt Organic',
+      brand: 'Nestle',
+      servingSizeG: 100,
+      calories100g: 60,
+      proteins100g: 9,
+      carbs100g: 5,
+      fats100g: 1,
+      source: 'OFF_API',
+      createdAt: 0,
+      isAdded: true,
+      addedAt: 200000,
+    };
+
+    const logInfo = {
+      byFoodId: new Map([
+        ['item_older', 100000],
+        ['item_recent', 200000],
+      ]),
+      byBarcode: new Map(),
+      byNameKey: new Map(),
+    };
+
+    const items = [olderItem, recentItem, offItem];
+    const sorted = sortMergedResults(items, 'yogurt', 'en', 'us', logInfo);
+
+    // Most recent logged item should be #1
+    expect(sorted[0].id).toBe('item_recent');
+    // Older logged item should be #2
+    expect(sorted[1].id).toBe('item_older');
+    // Unlogged item should be #3
+    expect(sorted[2].id).toBe('off_400');
+  });
+
+  it('should filter out standalone Health Connect synthetic dummy items from search results', () => {
+    const hcDummy: FoodItem = {
+      id: 'hc_food_12345678',
+      name: 'Health Connect Entry',
+      brand: 'Health Connect',
+      servingSizeG: 100,
+      calories100g: 200,
+      proteins100g: 15,
+      carbs100g: 20,
+      fats100g: 5,
+      source: 'MANUAL',
+      createdAt: Date.now(),
+      isAdded: true,
+    };
+
+    const items = [hcDummy, offItem, swissItem];
+    const sorted = sortMergedResults(items, 'chicken', 'en', 'us');
+
+    expect(sorted.find((f) => f.id === 'hc_food_12345678')).toBeUndefined();
+    expect(sorted.find((f) => f.brand === 'Health Connect')).toBeUndefined();
+  });
+});

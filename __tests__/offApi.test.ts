@@ -3,6 +3,7 @@ import {
   transformOFFProduct,
   searchProductsOFF,
   clearOFFSearchCache,
+  sanitizeOFFQuery,
 } from '../src/services/offApi';
 
 describe('Open Food Facts API & Regional Prioritization', () => {
@@ -10,6 +11,11 @@ describe('Open Food Facts API & Regional Prioritization', () => {
     jest.clearAllMocks();
     clearOFFSearchCache();
     (global as any).fetch = jest.fn();
+  });
+
+  it('should sanitize search queries by stripping apostrophes and extra spaces', () => {
+    expect(sanitizeOFFQuery("pain de mie harry's")).toBe("pain de mie harrys");
+    expect(sanitizeOFFQuery("flocons d'avoine")).toBe("flocons davoine");
   });
 
   it('should detect device locale info with fallback', () => {
@@ -77,7 +83,7 @@ describe('Open Food Facts API & Regional Prioritization', () => {
 
     expect(calledUrl).toContain('openfoodfacts.org');
     expect(calledUrl).toContain('lc=fr');
-    expect(calledUrl).toContain('cc=fr');
+    expect(calledUrl).toContain('search_terms=avoine');
 
     // FR item should be prioritized (ranked first)
     expect(results.length).toBe(2);

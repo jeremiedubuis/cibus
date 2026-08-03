@@ -30,6 +30,7 @@ describe('i18n Localization Suite', () => {
     expect(i18n.t('userProfile.tdeeLabel')).toBe('Total Daily Energy Expenditure (TDEE)');
     expect(i18n.t('userProfile.recommendedCalorieTarget')).toBe('Recommended Daily Calorie Target');
     expect(i18n.t('userProfile.saveProfileBtn')).toBe('Save Profile & Targets');
+    expect(i18n.t('userProfile.hcStatusSleep', { status: 'Connected' })).toBe('Sleep Sync: Connected');
   });
 
   it('should return French translations when language is fr', async () => {
@@ -56,5 +57,6 @@ describe('i18n Localization Suite', () => {
     expect(i18n.t('userProfile.tdeeLabel')).toBe('Dépense énergétique quotidienne (DEJT)');
     expect(i18n.t('userProfile.recommendedCalorieTarget')).toBe('Objectif calorique quotidien recommandé');
     expect(i18n.t('userProfile.saveProfileBtn')).toBe('Enregistrer le profil & les objectifs');
+    expect(i18n.t('userProfile.hcStatusSleep', { status: 'Connecté' })).toBe('Synchro Sommeil : Connecté');
   });
 });

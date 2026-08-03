@@ -1,8 +1,14 @@
-import { FoodItem, MealEntry, UserProfile } from '../types';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ActivityEntry, FoodItem, MealEntry, SleepEntry, UserProfile } from '../types';
 import { calculateNutritionTargets } from './nutritionCalculator';
 
-// Local storage state for offline-first resilience & cross-platform support
-let profileStore: UserProfile = {
+const PROFILE_STORAGE_KEY = '@joules_user_profile';
+const MEAL_STORAGE_KEY = '@joules_meal_entries';
+const ACTIVITY_STORAGE_KEY = '@joules_activity_entries';
+const SLEEP_STORAGE_KEY = '@joules_sleep_entries';
+const DISCLAIMER_STORAGE_KEY = '@joules_disclaimer_accepted';
+
+const DEFAULT_PROFILE: UserProfile = {
   id: 'default_user',
   weightKg: 75,
   targetWeightKg: 70,
@@ -20,120 +26,90 @@ let profileStore: UserProfile = {
   lunchPct: 0.35,
   dinnerPct: 0.3,
   snackPct: 0.1,
+  defaultWorkoutDurationMinutes: 20,
+  targetSleepMinutes: 480,
   updatedAt: Date.now(),
 };
 
+// Local storage state for offline-first resilience & cross-platform support
+let profileStore: UserProfile = { ...DEFAULT_PROFILE };
+
 let foodsStore: Map<string, FoodItem> = new Map();
 let mealEntriesStore: MealEntry[] = [];
+let activityEntriesStore: ActivityEntry[] = [];
+let sleepEntriesStore: SleepEntry[] = [];
 
-// Seed default master foods catalog
-const SEED_FOODS: FoodItem[] = [
-  {
-    id: 'food_raw_tomato_01',
-    name: 'Tomate fraîche (Raw Tomato)',
-    brand: 'Fruits & Légumes',
-    servingSizeG: 100,
-    calories100g: 18,
-    proteins100g: 0.9,
-    carbs100g: 3.9,
-    fats100g: 0.2,
-    fiber100g: 1.2,
-    sodiumMg100g: 5,
-    source: 'MANUAL',
-    createdAt: Date.now() - 86400000 * 35,
-  },
-  {
-    id: 'food_cherry_tomato_02',
-    name: 'Tomates Cerises (Cherry Tomatoes)',
-    brand: 'Fruits & Légumes',
-    servingSizeG: 100,
-    calories100g: 19,
-    proteins100g: 0.9,
-    carbs100g: 2.5,
-    fats100g: 0.3,
-    fiber100g: 1.3,
-    sodiumMg100g: 4,
-    source: 'MANUAL',
-    createdAt: Date.now() - 86400000 * 34,
-  },
-  {
-    id: 'food_tomato_sauce_03',
-    name: 'Sauce Tomate Nature (Tomato Sauce)',
-    brand: 'Épicerie',
-    servingSizeG: 100,
-    calories100g: 32,
-    proteins100g: 1.4,
-    carbs100g: 6.2,
-    fats100g: 0.3,
-    fiber100g: 1.5,
-    sodiumMg100g: 320,
-    source: 'MANUAL',
-    createdAt: Date.now() - 86400000 * 33,
-  },
-  {
-    id: 'food_oatmeal_01',
-    barcode: '030000010204',
-    name: 'Whole Grain Rolled Oats',
-    brand: 'Quaker',
-    servingSizeG: 100,
-    calories100g: 375,
-    proteins100g: 13.3,
-    carbs100g: 66.7,
-    fats100g: 6.7,
-    fiber100g: 10.0,
-    sodiumMg100g: 0,
-    source: 'OFF_API',
-    createdAt: Date.now() - 86400000 * 30,
-  },
-  {
-    id: 'food_chicken_02',
-    name: 'Poulet Grillé / Chicken Breast',
-    brand: 'Boucherie',
-    servingSizeG: 100,
-    calories100g: 165,
-    proteins100g: 31.0,
-    carbs100g: 0.0,
-    fats100g: 3.6,
-    fiber100g: 0.0,
-    sodiumMg100g: 74,
-    source: 'MANUAL',
-    createdAt: Date.now() - 86400000 * 20,
-  },
-  {
-    id: 'food_apple_03',
-    barcode: '000000004011',
-    name: 'Pomme Rouge / Red Apple',
-    brand: 'Fruits & Légumes',
-    servingSizeG: 100,
-    calories100g: 52,
-    proteins100g: 0.3,
-    carbs100g: 13.8,
-    fats100g: 0.2,
-    fiber100g: 2.4,
-    sodiumMg100g: 1,
-    source: 'OFF_API',
-    createdAt: Date.now() - 86400000 * 15,
-  },
-  {
-    id: 'food_greek_yogurt_04',
-    name: 'Yaourt Grec Nature / Greek Yogurt',
-    brand: 'Laiterie',
-    servingSizeG: 100,
-    calories100g: 59,
-    proteins100g: 10.2,
-    carbs100g: 3.6,
-    fats100g: 0.4,
-    fiber100g: 0.0,
-    sodiumMg100g: 36,
-    source: 'OFF_API',
-    createdAt: Date.now() - 86400000 * 10,
-  },
-];
+async function persistProfileStore(): Promise<void> {
+  try {
+    await AsyncStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profileStore));
+  } catch (err) {
+    console.error('Failed to persist user profile:', err);
+  }
+}
 
-SEED_FOODS.forEach((f) => foodsStore.set(f.id, f));
+export async function persistActivityStore(): Promise<void> {
+  try {
+    await AsyncStorage.setItem(ACTIVITY_STORAGE_KEY, JSON.stringify(activityEntriesStore));
+  } catch (err) {
+    console.error('Failed to persist activity entries:', err);
+  }
+}
+
+export async function persistMealStore(): Promise<void> {
+  try {
+    await AsyncStorage.setItem(MEAL_STORAGE_KEY, JSON.stringify(mealEntriesStore));
+  } catch (err) {
+    console.error('Failed to persist meal entries:', err);
+  }
+}
+
+export async function persistSleepStore(): Promise<void> {
+  try {
+    await AsyncStorage.setItem(SLEEP_STORAGE_KEY, JSON.stringify(sleepEntriesStore));
+  } catch (err) {
+    console.error('Failed to persist sleep entries:', err);
+  }
+}
 
 // Initialize Database Service
 export async function initDatabase(): Promise<void> {
+  try {
+    const jsonProfile = await AsyncStorage.getItem(PROFILE_STORAGE_KEY);
+    if (jsonProfile != null) {
+      const savedProfile = JSON.parse(jsonProfile);
+      profileStore = { ...DEFAULT_PROFILE, ...savedProfile };
+    }
+  } catch (err) {
+    console.error('Failed to load user profile from storage:', err);
+  }
+
+  try {
+    const jsonActivities = await AsyncStorage.getItem(ACTIVITY_STORAGE_KEY);
+    if (jsonActivities != null) {
+      activityEntriesStore = JSON.parse(jsonActivities);
+    }
+  } catch (err) {
+    console.error('Failed to load activity entries from storage:', err);
+  }
+
+  try {
+    const jsonMeals = await AsyncStorage.getItem(MEAL_STORAGE_KEY);
+    if (jsonMeals != null) {
+      mealEntriesStore = JSON.parse(jsonMeals);
+    }
+  } catch (err) {
+    console.error('Failed to load meal entries from storage:', err);
+  }
+
+  try {
+    const jsonSleep = await AsyncStorage.getItem(SLEEP_STORAGE_KEY);
+    if (jsonSleep != null) {
+      sleepEntriesStore = JSON.parse(jsonSleep);
+    }
+  } catch (err) {
+    console.error('Failed to load sleep entries from storage:', err);
+  }
+
   // Ensure profile initial calculation targets are up to date
   const targets = calculateNutritionTargets(
     profileStore.weightKg,
@@ -156,6 +132,8 @@ export async function initDatabase(): Promise<void> {
   profileStore.proteinTargetG = targets.proteinG;
   profileStore.carbTargetG = targets.carbG;
   profileStore.fatTargetG = targets.fatG;
+
+  await persistProfileStore();
 }
 
 // User Profile Operations
@@ -188,6 +166,8 @@ export async function saveUserProfile(profileData: Omit<UserProfile, 'id' | 'upd
     id: 'default_user',
     targetWeightKg: targetWeight,
     wantMuscleGain: wantMuscle,
+    defaultWorkoutDurationMinutes: profileData.defaultWorkoutDurationMinutes ?? 20,
+    targetSleepMinutes: profileData.targetSleepMinutes ?? profileStore.targetSleepMinutes ?? 480,
     goalType: targets.derivedGoalType,
     calorieTarget: targets.baseCalorieTarget,
     proteinTargetG: targets.proteinG,
@@ -195,6 +175,8 @@ export async function saveUserProfile(profileData: Omit<UserProfile, 'id' | 'upd
     fatTargetG: targets.fatG,
     updatedAt: Date.now(),
   };
+
+  await persistProfileStore();
 
   return { ...profileStore };
 }
@@ -226,14 +208,70 @@ export async function saveFoodItem(food: FoodItem): Promise<FoodItem> {
 
 export async function searchLocalFoods(query: string): Promise<FoodItem[]> {
   const q = query.toLowerCase().trim();
-  if (!q) return Array.from(foodsStore.values());
+  const validLocal = Array.from(foodsStore.values()).filter(
+    (f) => f.brand !== 'Health Connect' && !f.id.startsWith('hc_food_')
+  );
+  if (!q) return validLocal;
 
-  return Array.from(foodsStore.values()).filter(
+  return validLocal.filter(
     (f) =>
       f.name.toLowerCase().includes(q) ||
       (f.brand && f.brand.toLowerCase().includes(q)) ||
       (f.barcode && f.barcode.includes(q))
   );
+}
+
+export interface RecentFoodLogInfo {
+  byFoodId: Map<string, number>;
+  byBarcode: Map<string, number>;
+  byNameKey: Map<string, number>;
+}
+
+export async function getRecentFoodLogInfo(): Promise<RecentFoodLogInfo> {
+  const byFoodId = new Map<string, number>();
+  const byBarcode = new Map<string, number>();
+  const byNameKey = new Map<string, number>();
+
+  const updateMax = (map: Map<string, number>, key: string | undefined | null, timestamp: number) => {
+    if (!key) return;
+    const existing = map.get(key) || 0;
+    if (timestamp > existing) {
+      map.set(key, timestamp);
+    }
+  };
+
+  for (const entry of mealEntriesStore) {
+    const food = entry.food || foodsStore.get(entry.foodId);
+    let timestamp = 0;
+    if (entry.date) {
+      const d = new Date(entry.date);
+      timestamp = !isNaN(d.getTime()) ? d.getTime() : 0;
+    }
+    if (food?.addedAt && food.addedAt > timestamp) {
+      timestamp = food.addedAt;
+    }
+
+    if (entry.foodId) {
+      updateMax(byFoodId, entry.foodId, timestamp);
+    }
+    if (food?.barcode) {
+      updateMax(byBarcode, food.barcode, timestamp);
+    }
+    if (food?.name) {
+      const normName = food.name.toLowerCase().trim();
+      updateMax(byNameKey, normName, timestamp);
+    }
+  }
+
+  for (const food of foodsStore.values()) {
+    if (food.isAdded && food.addedAt) {
+      updateMax(byFoodId, food.id, food.addedAt);
+      if (food.barcode) updateMax(byBarcode, food.barcode, food.addedAt);
+      if (food.name) updateMax(byNameKey, food.name.toLowerCase().trim(), food.addedAt);
+    }
+  }
+
+  return { byFoodId, byBarcode, byNameKey };
 }
 
 // Meal Entries Operations
@@ -247,6 +285,14 @@ export async function getMealEntriesByDate(dateStr: string): Promise<MealEntry[]
 }
 
 export async function addMealEntry(entry: Omit<MealEntry, 'id'>): Promise<MealEntry> {
+  if (entry.healthConnectId) {
+    const existing = mealEntriesStore.find((m) => m.healthConnectId === entry.healthConnectId);
+    if (existing) {
+      return { ...existing, food: foodsStore.get(existing.foodId) };
+    }
+  }
+
+  // Ensure catalog food is marked as added/logged
   const existingFood = foodsStore.get(entry.foodId);
   if (existingFood && !existingFood.isAdded) {
     const markedFood: FoodItem = {
@@ -315,18 +361,235 @@ export async function findMealEntryByHealthConnectId(healthConnectId: string): P
   return entry ? { ...entry, food: foodsStore.get(entry.foodId) } : null;
 }
 
+// Activity Entries Operations
+export async function getActivityEntriesByDate(dateStr: string): Promise<ActivityEntry[]> {
+  return activityEntriesStore
+    .filter((entry) => entry.date === dateStr)
+    .map((entry) => ({ ...entry }));
+}
+
+export async function addActivityEntry(entry: Omit<ActivityEntry, 'id'>): Promise<ActivityEntry> {
+  // 1. Deduplicate by exact healthConnectId if present
+  if (entry.healthConnectId) {
+    const existing = activityEntriesStore.find((a) => a.healthConnectId === entry.healthConnectId);
+    if (existing) {
+      const merged: ActivityEntry = {
+        ...existing,
+        caloriesKcal: entry.caloriesKcal > 0 ? entry.caloriesKcal : existing.caloriesKcal,
+        avgHeartRateBpm: entry.avgHeartRateBpm || existing.avgHeartRateBpm,
+        maxHeartRateBpm: entry.maxHeartRateBpm || existing.maxHeartRateBpm,
+        minHeartRateBpm: entry.minHeartRateBpm || existing.minHeartRateBpm,
+        heartRateSamples: entry.heartRateSamples?.length ? entry.heartRateSamples : existing.heartRateSamples,
+        heartRateZones: entry.heartRateZones || existing.heartRateZones,
+      };
+      const idx = activityEntriesStore.findIndex((a) => a.id === existing.id);
+      if (idx !== -1) activityEntriesStore[idx] = merged;
+      await persistActivityStore();
+      return { ...merged };
+    }
+  }
+
+  // 2. Deduplicate by date, activityType, and start time tolerance (within 15 minutes)
+  const parseMs = (timeStr?: string, dateStr?: string): number => {
+    if (!timeStr) return 0;
+    const parsed = Date.parse(timeStr);
+    if (!isNaN(parsed)) return parsed;
+    if (timeStr.includes(':') && dateStr) {
+      return Date.parse(`${dateStr}T${timeStr}:00.000Z`);
+    }
+    return 0;
+  };
+
+  const newStartMs = parseMs(entry.startTime, entry.date);
+
+  const existingMatchIndex = activityEntriesStore.findIndex((a) => {
+    if (a.date !== entry.date) return false;
+    if (a.activityType !== entry.activityType) return false;
+
+    const existingMs = parseMs(a.startTime, a.date);
+    if (newStartMs > 0 && existingMs > 0) {
+      return Math.abs(newStartMs - existingMs) <= 15 * 60 * 1000;
+    }
+
+    // Fallback: match by duration if start time couldn't be parsed
+    return Math.abs(a.durationMinutes - entry.durationMinutes) <= 5;
+  });
+
+  if (existingMatchIndex !== -1) {
+    const existing = activityEntriesStore[existingMatchIndex];
+    const merged: ActivityEntry = {
+      ...existing,
+      healthConnectId: entry.healthConnectId || existing.healthConnectId,
+      caloriesKcal: entry.caloriesKcal > 0 ? entry.caloriesKcal : existing.caloriesKcal,
+      durationMinutes: entry.durationMinutes || existing.durationMinutes,
+      distanceKm: entry.distanceKm ?? existing.distanceKm,
+      avgHeartRateBpm: entry.avgHeartRateBpm || existing.avgHeartRateBpm,
+      maxHeartRateBpm: entry.maxHeartRateBpm || existing.maxHeartRateBpm,
+      minHeartRateBpm: entry.minHeartRateBpm || existing.minHeartRateBpm,
+      heartRateSamples: entry.heartRateSamples?.length ? entry.heartRateSamples : existing.heartRateSamples,
+      heartRateZones: entry.heartRateZones || existing.heartRateZones,
+    };
+    activityEntriesStore[existingMatchIndex] = merged;
+    await persistActivityStore();
+    return { ...merged };
+  }
+
+  const newEntry: ActivityEntry = {
+    ...entry,
+    id: `activity_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+  };
+  activityEntriesStore.push(newEntry);
+  await persistActivityStore();
+  return { ...newEntry };
+}
+
+export async function updateActivityEntry(
+  activityId: string,
+  updatedData: Partial<ActivityEntry>
+): Promise<ActivityEntry | null> {
+  const index = activityEntriesStore.findIndex((a) => a.id === activityId);
+  if (index !== -1) {
+    const updatedEntry: ActivityEntry = {
+      ...activityEntriesStore[index],
+      ...updatedData,
+    };
+    activityEntriesStore[index] = updatedEntry;
+    await persistActivityStore();
+    return { ...updatedEntry };
+  }
+  return null;
+}
+
+export async function deleteActivityEntry(activityId: string): Promise<void> {
+  activityEntriesStore = activityEntriesStore.filter((a) => a.id !== activityId);
+  await persistActivityStore();
+}
+
+export async function getAllActivityEntries(startDateStr?: string, endDateStr?: string): Promise<ActivityEntry[]> {
+  return activityEntriesStore
+    .filter((entry) => {
+      if (startDateStr && entry.date < startDateStr) return false;
+      if (endDateStr && entry.date > endDateStr) return false;
+      return true;
+    })
+    .map((entry) => ({ ...entry }));
+}
+
+export async function updateActivityHealthConnectId(activityId: string, healthConnectId: string): Promise<void> {
+  const entry = activityEntriesStore.find((a) => a.id === activityId);
+  if (entry) {
+    entry.healthConnectId = healthConnectId;
+    await persistActivityStore();
+  }
+}
+
+export async function findActivityEntryByHealthConnectId(healthConnectId: string): Promise<ActivityEntry | null> {
+  const entry = activityEntriesStore.find((a) => a.healthConnectId === healthConnectId);
+  return entry ? { ...entry } : null;
+}
+
+// Sleep Entries Operations
+export async function getSleepEntriesByDate(dateStr: string): Promise<SleepEntry[]> {
+  return sleepEntriesStore
+    .filter((entry) => entry.date === dateStr)
+    .map((entry) => ({ ...entry }));
+}
+
+export async function addSleepEntry(entry: Omit<SleepEntry, 'id'>): Promise<SleepEntry> {
+  if (entry.healthConnectId) {
+    const existing = sleepEntriesStore.find((s) => s.healthConnectId === entry.healthConnectId);
+    if (existing) {
+      return { ...existing };
+    }
+  }
+
+  const newEntry: SleepEntry = {
+    ...entry,
+    id: `sleep_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+  };
+  sleepEntriesStore.push(newEntry);
+  return { ...newEntry };
+}
+
+export async function updateSleepEntry(
+  sleepId: string,
+  updatedData: Partial<SleepEntry>
+): Promise<SleepEntry | null> {
+  const index = sleepEntriesStore.findIndex((s) => s.id === sleepId);
+  if (index !== -1) {
+    const updatedEntry: SleepEntry = {
+      ...sleepEntriesStore[index],
+      ...updatedData,
+    };
+    sleepEntriesStore[index] = updatedEntry;
+    return { ...updatedEntry };
+  }
+  return null;
+}
+
+export async function deleteSleepEntry(sleepId: string): Promise<void> {
+  sleepEntriesStore = sleepEntriesStore.filter((s) => s.id !== sleepId);
+}
+
+export async function getAllSleepEntries(startDateStr?: string, endDateStr?: string): Promise<SleepEntry[]> {
+  return sleepEntriesStore
+    .filter((entry) => {
+      if (startDateStr && entry.date < startDateStr) return false;
+      if (endDateStr && entry.date > endDateStr) return false;
+      return true;
+    })
+    .map((entry) => ({ ...entry }));
+}
+
+export async function updateSleepHealthConnectId(sleepId: string, healthConnectId: string): Promise<void> {
+  const entry = sleepEntriesStore.find((s) => s.id === sleepId);
+  if (entry) {
+    entry.healthConnectId = healthConnectId;
+  }
+}
+
+export async function findSleepEntryByHealthConnectId(healthConnectId: string): Promise<SleepEntry | null> {
+  const entry = sleepEntriesStore.find((s) => s.healthConnectId === healthConnectId);
+  return entry ? { ...entry } : null;
+}
+
 export async function updateLastReconciledAt(timestamp: number): Promise<void> {
   profileStore.lastReconciledAt = timestamp;
+  await persistProfileStore();
 }
 
 export async function getLastReconciledAt(): Promise<number | undefined> {
   return profileStore.lastReconciledAt;
 }
 
-// Clear helper for tests
-export function _resetDatabaseState(): void {
-  foodsStore.clear();
-  SEED_FOODS.forEach((f) => foodsStore.set(f.id, f));
-  mealEntriesStore = [];
+export async function getDisclaimerAccepted(): Promise<boolean> {
+  try {
+    const val = await AsyncStorage.getItem(DISCLAIMER_STORAGE_KEY);
+    return val === 'true';
+  } catch (err) {
+    console.error('Failed to read disclaimer status:', err);
+    return false;
+  }
 }
 
+export async function saveDisclaimerAccepted(): Promise<void> {
+  try {
+    await AsyncStorage.setItem(DISCLAIMER_STORAGE_KEY, 'true');
+  } catch (err) {
+    console.error('Failed to save disclaimer status:', err);
+  }
+}
+
+// Clear helper for tests
+export function _resetDatabaseState(): void {
+  profileStore = { ...DEFAULT_PROFILE };
+  foodsStore.clear();
+  mealEntriesStore = [];
+  activityEntriesStore = [];
+  sleepEntriesStore = [];
+  AsyncStorage.removeItem(PROFILE_STORAGE_KEY).catch(() => {});
+  AsyncStorage.removeItem(MEAL_STORAGE_KEY).catch(() => {});
+  AsyncStorage.removeItem(ACTIVITY_STORAGE_KEY).catch(() => {});
+  AsyncStorage.removeItem(SLEEP_STORAGE_KEY).catch(() => {});
+  AsyncStorage.removeItem(DISCLAIMER_STORAGE_KEY).catch(() => {});
+}

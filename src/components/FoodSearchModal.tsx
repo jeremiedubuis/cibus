@@ -20,7 +20,7 @@ import { searchCiqualFoods } from '../services/ciqualService';
 import { searchSwissFoods } from '../services/swissService';
 import { searchFineliFoods } from '../services/fineliService';
 import { parseNutritionText, recognizeTextFromImage } from '../services/ocrParser';
-import { saveFoodItem, searchLocalFoods } from '../services/database';
+import { saveFoodItem, searchLocalFoods, getRecentFoodLogInfo, RecentFoodLogInfo } from '../services/database';
 import { COLORS, FONTS } from '../constants/theme';
 
 export interface FoodSearchModalProps {
@@ -28,25 +28,6 @@ export interface FoodSearchModalProps {
   onClose: () => void;
   onSelectFood: (food: FoodItem) => void;
 }
-
-const SAMPLE_LABELS = [
-  {
-    name: 'Whey Protein Powder',
-    text: "VALEUR NUTRITIONNELLE 100g\nÉnergie: 390 kcal\nProtéines: 78.0 g\nGlucides: 5.5 g\nLipides: 4.2 g",
-  },
-  {
-    name: 'Greek Yogurt 0%',
-    text: "NUTRITION FACTS PER 100G\nEnergy: 59 kcal\nProtein: 10.3 g\nCarbohydrates: 3.6 g\nTotal Fat: 0.2 g",
-  },
-  {
-    name: 'Almond Butter',
-    text: "NÄHRWERTE PRO 100G\nBrennwert: 615 kcal\nEiweiß: 21.0 g\nKohlenhydrate: 18.8 g\nFett: 52.5 g",
-  },
-  {
-    name: 'Oat Flakes Granola',
-    text: "NUTRITION INFORMATION / 100g\nEnergy: 430 kcal\nProtein: 12.0 g\nCarbs: 64.0 g\nFat: 14.5 g",
-  },
-];
 
 export const FoodSearchModal: React.FC<FoodSearchModalProps> = ({
   visible,
@@ -139,6 +120,9 @@ export const FoodSearchModal: React.FC<FoodSearchModalProps> = ({
         // Search OFF API with regional prioritization based on active language/locale
         const offMatches = await searchProductsOFF(q, deviceLocale.country, activeLang);
 
+        // Fetch recent food log history for recency sorting
+        const logInfo = await getRecentFoodLogInfo();
+
         // Only update state if this request is still the latest one
         if (requestId === searchRequestIdRef.current) {
           const existingLocalIds = new Set(localMatches.map((f) => f.id));
@@ -165,7 +149,7 @@ export const FoodSearchModal: React.FC<FoodSearchModalProps> = ({
           const filteredOff = offMatches.filter((f) => !f.barcode || !existingBarcodes.has(f.barcode));
 
           const merged = [...localMatches, ...filteredCiqual, ...filteredSwiss, ...filteredFineli, ...filteredOff];
-          const sortedMerged = sortMergedResults(merged, q, activeLang, deviceLocale.country);
+          const sortedMerged = sortMergedResults(merged, q, activeLang, deviceLocale.country, logInfo);
 
           setResults(sortedMerged);
         }
@@ -301,39 +285,29 @@ export const FoodSearchModal: React.FC<FoodSearchModalProps> = ({
     );
   };
 
-  const handleSnapPhoto = async (sampleText?: string) => {
-    if (sampleText) {
-      setIsScanning(true);
-      setOcrText(sampleText);
-      handleRunOCR(sampleText);
-      setIsScanning(false);
-      setIsCameraActive(false);
-      return;
-    }
-
+  const handleSnapPhoto = async () => {
     if (cameraRef.current && typeof cameraRef.current.takePictureAsync === 'function') {
       try {
         setIsScanning(true);
         const photo = await cameraRef.current.takePictureAsync({ quality: 0.8 });
         if (photo?.uri) {
           const text = await recognizeTextFromImage(photo.uri);
-          const textToUse = text.trim() || SAMPLE_LABELS[0].text;
-          setOcrText(textToUse);
-          handleRunOCR(textToUse);
+          if (text.trim()) {
+            setOcrText(text);
+            handleRunOCR(text);
+          } else {
+            setOcrStatus('Could not read any text from this image. Please try again or enter the values manually.');
+          }
         }
       } catch (err) {
         console.warn('Failed to take picture or process OCR:', err);
-        const fallbackText = ocrText || SAMPLE_LABELS[0].text;
-        setOcrText(fallbackText);
-        handleRunOCR(fallbackText);
+        setOcrStatus('Could not process this image. Please try again or enter the values manually.');
       } finally {
         setIsScanning(false);
         setIsCameraActive(false);
       }
     } else {
-      const labelText = ocrText || SAMPLE_LABELS[0].text;
-      setOcrText(labelText);
-      handleRunOCR(labelText);
+      setOcrStatus('Camera is unavailable. Please enter the values manually.');
       setIsCameraActive(false);
     }
   };
@@ -663,7 +637,7 @@ export const FoodSearchModal: React.FC<FoodSearchModalProps> = ({
                 <Text style={styles.permissionIcon}>📷</Text>
                 <Text style={styles.permissionTitle}>Camera Permission Required</Text>
                 <Text style={styles.permissionSubtext}>
-                  Cibus needs access to your camera to scan barcodes and nutrition labels.
+                  Joules needs access to your camera to scan barcodes and nutrition labels.
                 </Text>
                 <TouchableOpacity
                   style={styles.grantPermissionBtn}
@@ -676,7 +650,7 @@ export const FoodSearchModal: React.FC<FoodSearchModalProps> = ({
               <View style={styles.viewfinderContainer}>
                 <CameraView
                   ref={cameraRef}
-                  style={StyleSheet.absoluteFillObject}
+                  style={StyleSheet.absoluteFill}
                   enableTorch={cameraFlash}
                   barcodeScannerSettings={
                     cameraMode === 'BARCODE'
@@ -707,22 +681,6 @@ export const FoodSearchModal: React.FC<FoodSearchModalProps> = ({
                   </View>
                 </View>
 
-                {cameraMode === 'OCR' && (
-                  <View style={styles.sampleLabelsContainer}>
-                    <Text style={styles.sampleLabelTitle}>{t('foodSearch.testLabels')}</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.sampleScroll}>
-                      {SAMPLE_LABELS.map((sample, idx) => (
-                        <TouchableOpacity
-                          key={idx}
-                          style={styles.sampleChip}
-                          onPress={() => handleSnapPhoto(sample.text)}
-                        >
-                          <Text style={styles.sampleChipText}>{sample.name}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </ScrollView>
-                  </View>
-                )}
               </View>
             )}
 
@@ -1239,36 +1197,6 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     shadowOpacity: 0.9,
   },
-  sampleLabelsContainer: {
-    marginTop: 28,
-    width: '100%',
-  },
-  sampleLabelTitle: {
-    color: COLORS.textSecondary,
-    fontSize: 12,
-    fontWeight: '700',
-    fontFamily: FONTS.bold,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  sampleScroll: {
-    flexGrow: 0,
-  },
-  sampleChip: {
-    backgroundColor: COLORS.cardBg,
-    borderRadius: 20,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    marginRight: 8,
-    borderWidth: 1,
-    borderColor: COLORS.cardBorder,
-  },
-  sampleChipText: {
-    color: COLORS.primary,
-    fontSize: 12,
-    fontWeight: '700',
-    fontFamily: FONTS.bold,
-  },
   cameraFooter: {
     backgroundColor: COLORS.bgBackground,
     paddingVertical: 24,
@@ -1339,138 +1267,135 @@ const styles = StyleSheet.create({
   },
 });
 
+export function getFoodLastLoggedAt(
+  item: FoodItem,
+  logInfo?: RecentFoodLogInfo
+): number {
+  if (!logInfo) {
+    return item.isAdded ? (item.addedAt || 1) : 0;
+  }
+  let maxTime = 0;
+  if (item.id && logInfo.byFoodId?.has(item.id)) {
+    maxTime = Math.max(maxTime, logInfo.byFoodId.get(item.id)!);
+  }
+  if (item.barcode && logInfo.byBarcode?.has(item.barcode)) {
+    maxTime = Math.max(maxTime, logInfo.byBarcode.get(item.barcode)!);
+  }
+  if (item.name) {
+    const normName = item.name.toLowerCase().trim();
+    if (logInfo.byNameKey?.has(normName)) {
+      maxTime = Math.max(maxTime, logInfo.byNameKey.get(normName)!);
+    }
+  }
+  if (maxTime === 0 && item.isAdded) {
+    maxTime = item.addedAt || 1;
+  }
+  return maxTime;
+}
+
 export function sortMergedResults(
   items: FoodItem[],
   query: string,
   activeLanguage?: string,
-  country?: string
+  country?: string,
+  logInfo?: RecentFoodLogInfo
 ): FoodItem[] {
-  const q = query.toLowerCase().trim();
-  return [...items].sort((a, b) => {
-    const scoreA = getFoodItemScore(a, q, activeLanguage, country);
-    const scoreB = getFoodItemScore(b, q, activeLanguage, country);
+  // Filter out Health Connect dummy cards
+  const validItems = items.filter(
+    (item) => item.brand !== 'Health Connect' && !item.id.startsWith('hc_food_')
+  );
+
+  const queryWords = getSearchWords(query);
+
+  return [...validItems].sort((a, b) => {
+    const lastLoggedA = getFoodLastLoggedAt(a, logInfo);
+    const lastLoggedB = getFoodLastLoggedAt(b, logInfo);
+
+    const isLoggedA = lastLoggedA > 0;
+    const isLoggedB = lastLoggedB > 0;
+
+    if (isLoggedA && !isLoggedB) return -1;
+    if (!isLoggedA && isLoggedB) return 1;
+
+    if (isLoggedA && isLoggedB) {
+      if (lastLoggedA !== lastLoggedB) {
+        return lastLoggedB - lastLoggedA; // most recent first
+      }
+    }
+
+    const scoreA = getFoodItemScore(a, queryWords, activeLanguage, country);
+    const scoreB = getFoodItemScore(b, queryWords, activeLanguage, country);
     return scoreB - scoreA;
   });
 }
-
-const STOP_WORDS = new Set([
-  'de', 'd', 'l', 'la', 'le', 'du', 'des', 'un', 'une', 'au', 'aux', 'et', 'en',
-  'of', 'and', 'the', 'in', 'with', 'a', 'to', 'for'
-]);
 
 function normalizeSearchText(str: string): string {
   return (str || '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
-    .replace(/[''’"\-.,\/#!$%\^&\*;:{}=\-_`~()]/g, ' ')
+    // Keep contractions as one word: "Harry's" and "Harrys" should match.
+    .replace(/['’]/g, '')
+    .replace(/["\-.,\/#!$%\^&\*;:{}=\-_`~()]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
-export function getFoodItemScore(
-  item: FoodItem,
-  q: string,
-  activeLanguage?: string,
-  country?: string
-): number {
-  let score = 0;
-  const name = (item.name || '').trim();
-  const brand = (item.brand || '').trim();
+function getSearchWords(value: string | readonly string[]): string[] {
+  const text = typeof value === 'string' ? value : value.join(' ');
+  return normalizeSearchText(text).split(/\s+/).filter(Boolean);
+}
+
+function getSourceModifier(item: FoodItem, activeLanguage?: string, country?: string): number {
   const lang = (activeLanguage || 'fr').toLowerCase();
   const cntry = (country || 'fr').toLowerCase();
 
-  const normName = normalizeSearchText(name);
-  const normBrand = normalizeSearchText(brand);
-  const normFullName = `${normName} ${normBrand}`.trim();
-  const normQ = normalizeSearchText(q);
-
-  const allQWords = normQ.split(/\s+/).filter(Boolean);
-  const contentQWords = allQWords.filter((w) => !STOP_WORDS.has(w));
-  const effectiveWords = contentQWords.length > 0 ? contentQWords : allQWords;
-
-  // 1. Source Base Priority
   if (item.isAdded || item.source === 'MANUAL' || item.source === 'OCR_CUSTOM') {
-    // Foods stored in local memory that have been added by user -> Top priority to promote to top of list
-    score += 200;
-  } else if (item.source === 'OFF_API') {
-    // Open Food Facts live consumer brand catalog -> Top priority among external search databases
-    score += 130;
-    if (lang.startsWith('fr') || cntry === 'fr') {
-      score += 15; // Local market consumer products boost
-    }
-  } else if (item.source === 'CIQUAL') {
-    // Verified French national DB: Base score boosted by French locale/country context
-    score += 60;
-    if (cntry === 'fr') {
-      score += 30; // Device country match for France
-    }
-    if (lang.startsWith('fr') || /[éèêëàâùûîïôç]/i.test(q)) {
-      score += 20; // French language or accents boost
-    }
-  } else if (item.source === 'SWISS') {
-    // Verified Swiss national DB: Base score boosted by Swiss locale/country context
-    score += 60;
-    if (cntry === 'ch') {
-      score += 30; // Device country match for Switzerland
-    }
-    if (lang.startsWith('de') || lang.startsWith('it') || lang.startsWith('fr') || lang.startsWith('en')) {
-      score += 20; // Swiss national & common language match boost
-    }
-  } else if (item.source === 'FINELI') {
-    // Verified Finnish national DB: Base score boosted by Finnish locale/country context
-    score += 60;
-    if (cntry === 'fi') {
-      score += 30; // Device country match for Finland
-    }
-    if (lang.startsWith('fi')) {
-      score += 20; // Finnish language match boost
-    }
+    return 20;
   }
-
-  // 2. Pattern Matching Scores (Name & Brand)
-  if (normName === normQ || normFullName === normQ) {
-    score += 120;
-  } else if (normName.startsWith(normQ + ' ') || normName.startsWith(normQ + 's ') || normName.startsWith(normQ + ',')) {
-    score += 90;
-  } else if (normName.startsWith(normQ)) {
-    score += 75;
-  } else if (normFullName.includes(normQ)) {
-    score += 60;
+  if (item.source === 'OFF_API') {
+    return 13 + (lang.startsWith('fr') || cntry === 'fr' ? 2 : 0);
   }
-
-  // 3. Word Token & Content Coverage
-  const matchedAllCount = allQWords.filter((w) => normFullName.includes(w)).length;
-  const matchedContentCount = effectiveWords.filter((w) => normFullName.includes(w)).length;
-
-  const allRatio = allQWords.length > 0 ? matchedAllCount / allQWords.length : 0;
-  const contentRatio = effectiveWords.length > 0 ? matchedContentCount / effectiveWords.length : 0;
-  const brandMatchesAnyWord = effectiveWords.some((w) => normBrand.includes(w));
-
-  if (allRatio === 1) {
-    score += 70; // 100% of all query words match (including stop-words)
-    if (brandMatchesAnyWord) {
-      score += 25; // Extra bonus if brand name matches part of query (e.g. "harrys")
-    }
-  } else if (contentRatio === 1) {
-    score += 55; // 100% of key content words match (e.g. "pain", "mie", "harrys")
-    if (brandMatchesAnyWord) {
-      score += 20;
-    }
-  } else if (contentRatio >= 0.5) {
-    score += Math.round(contentRatio * 35);
-  } else if (matchedContentCount > 0) {
-    score += 10;
-  } else {
-    score -= 30;
+  if (item.source === 'CIQUAL') {
+    return 6 + (cntry === 'fr' ? 3 : 0) + (lang.startsWith('fr') ? 2 : 0);
   }
-
-  // 4. Title Conciseness Bonus
-  if (normName.includes(normQ) || normFullName.includes(normQ)) {
-    const ratio = Math.min(1, normQ.length / Math.max(normName.length, 1));
-    score += Math.round(ratio * 30);
+  if (item.source === 'SWISS') {
+    return 6 + (cntry === 'ch' ? 3 : 0)
+      + (lang.startsWith('de') || lang.startsWith('it') || lang.startsWith('fr') || lang.startsWith('en') ? 2 : 0);
   }
-
-  return score;
+  if (item.source === 'FINELI') {
+    return 6 + (cntry === 'fi' ? 3 : 0) + (lang.startsWith('fi') ? 2 : 0);
+  }
+  return 0;
 }
 
+const SEARCH_STOP_WORDS = new Set([
+  'de', 'd', 'l', 'la', 'le', 'du', 'des', 'un', 'une', 'au', 'aux', 'et', 'en',
+  'of', 'and', 'the', 'in', 'with', 'a', 'to', 'for'
+]);
+
+export function getFoodItemScore(
+  item: FoodItem,
+  query: string | readonly string[],
+  activeLanguage?: string,
+  country?: string
+): number {
+  const queryWords = getSearchWords(query);
+  const nameWords = getSearchWords(item.name || '');
+  const brandWords = getSearchWords(item.brand || '');
+
+  // Filter out stop words for brand matching to avoid false brand matches on words like 'de'
+  const contentQueryWords = queryWords.filter((w) => !SEARCH_STOP_WORDS.has(w));
+  const brandCheckWords = contentQueryWords.length > 0 ? contentQueryWords : queryWords;
+
+  // Exact token matching prevents a query such as "ham" from matching
+  // unrelated name tokens such as "champignon".
+  const matchingNameWordCount = queryWords.filter((word) => nameWords.includes(word)).length;
+  const matchingBrandWordCount = brandCheckWords.filter((word) => brandWords.includes(word)).length;
+
+  // Name and brand are both direct search intent signals. Brand matching is given
+  // a strong weight (250 points per matching word) so brand intent takes priority.
+  return matchingNameWordCount * 100
+    + matchingBrandWordCount * 250
+    + getSourceModifier(item, activeLanguage, country);
+}

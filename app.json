@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Cibus - Daily Nutrition & Health Connect Sync",
-    "slug": "cibus",
+    "name": "Joules",
+    "slug": "joules",
     "version": "1.0.0",
     "runtimeVersion": {
       "policy": "appVersion"
@@ -12,24 +12,19 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#0F172A"
-    },
     "assetBundlePatterns": [
       "**/*"
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.cibusai.nutritiontracker"
+      "bundleIdentifier": "com.joules.tracker"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#470000"
       },
-      "package": "com.cibusai.nutritiontracker",
+      "package": "com.joules.tracker",
       "permissions": [
         "CAMERA",
         "android.permission.health.READ_NUTRITION",
@@ -37,8 +32,16 @@
         "android.permission.health.READ_WEIGHT",
         "android.permission.health.WRITE_WEIGHT",
         "android.permission.health.READ_ACTIVE_CALORIES_BURNED",
+        "android.permission.health.WRITE_ACTIVE_CALORIES_BURNED",
+        "android.permission.health.READ_TOTAL_CALORIES_BURNED",
         "android.permission.health.READ_STEPS",
-        "android.permission.health.READ_EXERCISE"
+        "android.permission.health.READ_EXERCISE",
+        "android.permission.health.WRITE_EXERCISE",
+        "android.permission.health.READ_DISTANCE",
+        "android.permission.health.WRITE_DISTANCE",
+        "android.permission.health.READ_SLEEP",
+        "android.permission.health.WRITE_SLEEP",
+        "android.permission.health.READ_HEALTH_DATA_HISTORY"
       ],
       "intentFilters": [
         {
@@ -48,7 +51,7 @@
           ]
         },
         {
-          "action": "android.intent.action.VIEW_PERMISSION_USAGE",
+          "action": "VIEW_PERMISSION_USAGE",
           "category": [
             "HEALTH_PERMISSIONS"
           ]
@@ -62,9 +65,17 @@
       "expo-localization",
       "expo-font",
       [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#0F172A"
+        }
+      ],
+      [
         "expo-camera",
         {
-          "cameraPermission": "Allow Cibus to access your camera to scan food barcodes and nutrition labels."
+          "cameraPermission": "Allow Joules to access your camera to scan food barcodes and nutrition labels."
         }
       ]
     ]

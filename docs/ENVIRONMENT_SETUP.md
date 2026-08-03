@@ -1,6 +1,6 @@
 # Development Environment Setup Guide
 
-This document details how to set up your local development environment for building, running, and debugging **Cibus** (React Native / Expo / Android Health Connect).
+This document details how to set up your local development environment for building, running, and debugging **Joules** (React Native / Expo / Android Health Connect).
 
 ---
 
@@ -52,23 +52,28 @@ npm -v
 
 ### Step 3: Install Java Development Kit (JDK)
 
-Android Gradle Plugin and Expo support modern Java (JDK 17, 21, or 25). 
+This Expo 57 / React Native 0.86 project runs Gradle with **JDK 25**. CI uses
+the same version.
 
-On Fedora Linux, the package name is `java-latest-openjdk-devel` (or `java-21-openjdk-devel` / `java-25-openjdk-devel`).
+On Fedora Linux, install `java-25-openjdk-devel`.
 
 #### Install via Fedora DNF:
 ```bash
-sudo dnf install -y java-latest-openjdk-devel
+sudo dnf install -y java-25-openjdk-devel
 ```
 
-> **Note for Fedora 40/41/42+ users**: If `java-17-openjdk` returns "No match for argument", use `java-latest-openjdk-devel` or `java-21-openjdk-devel`. Alternatively, Android Studio comes bundled with JDK (JetBrains Runtime `jbr`), which Gradle can use automatically.
+> **Note for Fedora users**: `java-latest-openjdk-devel` is also suitable when
+> it provides Java 25. Android Studio's bundled JBR must likewise report Java
+> 25 or newer.
 
 Set `JAVA_HOME` in your `~/.bashrc` (or `~/.zshrc`):
 
 ```bash
-# Set JAVA_HOME to system OpenJDK or Android Studio bundled JDK
-export JAVA_HOME=/usr/lib/jvm/java-latest-openjdk
+# Keep this aligned with the Java version used by CI.
+export JAVA_HOME=/usr/lib/jvm/java-25-openjdk
 export PATH=$JAVA_HOME/bin:$PATH
+# Java 25 requires this for Android Gradle native/CMake subprocesses.
+export JAVA_TOOL_OPTIONS=--enable-native-access=ALL-UNNAMED
 ```
 
 Apply the environment changes:
@@ -76,10 +81,15 @@ Apply the environment changes:
 source ~/.bashrc
 ```
 
-Verify Java version:
+Verify that Java and its compiler are both Java 25:
 ```bash
 java -version
+javac -version
 ```
+
+Both commands should report Java 25. If `javac` is missing, the runtime-only
+package is installed; install `java-25-openjdk-devel` before running
+`npx expo run:android`.
 
 ---
 
@@ -215,7 +225,7 @@ adb devices
 ---
 
 
-### Step 9: Launch Cibus in Dev Mode on Fedora
+### Step 9: Launch Joules in Dev Mode on Fedora
 
 1. Clone the project repository and navigate to the root directory:
    ```bash
@@ -266,6 +276,4 @@ To test actual OS permission prompts and live data sync:
   # Replace <path-to-extracted-file.apk> with the actual path to your downloaded APK
   adb install /path/to/extracted-HealthConnectToolbox.apk
   ```
-* Use the Toolbox app to insert steps, workouts, or meals to verify live read/write sync in Cibus.
-
-
+* Use the Toolbox app to insert steps, workouts, or meals to verify live read/write sync in Joules.

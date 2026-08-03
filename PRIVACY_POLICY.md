@@ -1,14 +1,14 @@
-# Privacy Policy for Cibus
+# Privacy Policy for Joules
 
 **Effective Date:** July 31, 2026
 
-**Cibus** ("we", "our", or "us") is committed to protecting your privacy. This Privacy Policy explains how our local-first mobile application collects, uses, and safeguards your health and personal data when you use the **Cibus** application (the "App").
+**Joules** ("we", "our", or "us") is committed to protecting your privacy. This Privacy Policy explains how our local-first mobile application collects, uses, and safeguards your health and personal data when you use the **Joules** application (the "App").
 
 ---
 
 ## 1. Local-First & Privacy-Focused Principles
 
-Cibus is built on a **local-first architecture**. All your personal health records, meal entries, biometric profiles, and nutrition metrics are stored exclusively on your local mobile device inside a local SQLite database. We do not operate central application servers to collect, harvest, or monetize your personal health data.
+Joules is built on a **local-first architecture**. All your personal health records, meal entries, biometric profiles, and nutrition metrics are stored exclusively on your local mobile device inside a local SQLite database. We do not operate central application servers to collect, harvest, or monetize your personal health data.
 
 ---
 
@@ -31,7 +31,7 @@ When you search for food items or lookup barcodes online, the App sends search t
 
 ## 3. Google Health Connect Integration & Data Usage
 
-Cibus integrates with **Google Health Connect** to provide dual-way health synchronization on Android devices.
+Joules integrates with **Google Health Connect** to provide dual-way health synchronization on Android devices.
 
 ### A. Requested Health Permissions
 * `android.permission.health.READ_NUTRITION` & `WRITE_NUTRITION`
@@ -40,11 +40,11 @@ Cibus integrates with **Google Health Connect** to provide dual-way health synch
 * `android.permission.health.READ_STEPS`
 
 ### B. Health Connect Data Usage Justification
-* **Writing Nutrition Records**: When you log a meal in Cibus, dietary intake details (calories, protein, carbs, fats, and meal type) are written to Google Health Connect so other health apps on your device (e.g. Google Fit, Samsung Health) can access your dietary records.
+* **Writing Nutrition Records**: When you log a meal in Joules, dietary intake details (calories, protein, carbs, fats, and meal type) are written to Google Health Connect so other health apps on your device (e.g. Google Fit, Samsung Health) can access your dietary records.
 * **Reading Active Calories & Steps**: The App reads active calories burned and daily step counts from Google Health Connect solely to dynamically calculate your daily energy budget on your device dashboard ($\text{Dynamic Budget} = \text{Base Target} + \text{Active Calories Burned}$).
 
 ### C. Health Connect Privacy Guarantee
-* Health Connect data read by Cibus is processed **strictly in-memory and on-device**.
+* Health Connect data read by Joules is processed **strictly in-memory and on-device**.
 * Health Connect data is **never transmitted to external servers**, **never sold to third parties**, and **never used for advertising or marketing purposes**.
 
 ---
@@ -65,13 +65,21 @@ Your data is secured locally on your Android device using standard operating sys
 
 You retain complete ownership and control over your data:
 * **Deleting Meal Entries**: You can delete individual meal entries directly from the App dashboard at any time.
-* **Complete Data Reset**: You can erase all application data, local databases, and cached foods by clearing the App's data in Android Settings (*Settings > Apps > Cibus > Storage > Clear Data*) or uninstalling the App.
+* **Complete Data Reset**: You can erase all application data, local databases, and cached foods by clearing the App's data in Android Settings (*Settings > Apps > Joules > Storage > Clear Data*) or uninstalling the App.
 
 ---
 
-## 7. Contact Us
+## 7. Third-Party Data Attributions & Licenses
 
-If you have any questions, concerns, or requests regarding this Privacy Policy or data handling practices, please contact us at:
+Joules utilizes open food and nutrition datasets under their respective open data licenses:
 
-* **Email:** [Your Contact Email]
-* **Website / Repository:** [Your Website or Project URL]
+* **Open Food Facts**: Product data and barcode information are sourced from [Open Food Facts](https://world.openfoodfacts.org), available under the [Open Database License (ODbL)](https://opendatacommons.org/licenses/odbl/1-0/).
+* **ANSES CIQUAL (France)**: French nutritional composition table provided by ANSES under the [Etalab Open License](https://github.com/etalab/licence-ouverte).
+* **Swiss Food Composition Database (Switzerland)**: Swiss nutrition data provided by the Federal Food Safety and Veterinary Office (FSVO) / Agroscope.
+* **Fineli (Finland)**: Finnish food composition data provided by the Finnish Institute for Health and Welfare (THL).
+
+---
+
+## 8. Personal Project & AI Assistance Disclaimer
+
+Joules is an experimental personal project developed with heavy reliance on AI tools. All features, macro calculations, OCR label extractions, and health sync routines are provided **"as-is"** for informational purposes only. The application makes no medical, fitness, or nutritional guarantees or warranties.
