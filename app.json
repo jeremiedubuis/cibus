@@ -1,0 +1,72 @@
+{
+  "expo": {
+    "name": "Cibus - Daily Nutrition & Health Connect Sync",
+    "slug": "cibus",
+    "version": "1.0.0",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "fallbackToCacheTimeout": 0
+    },
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0F172A"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.cibusai.nutritiontracker"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#470000"
+      },
+      "package": "com.cibusai.nutritiontracker",
+      "permissions": [
+        "CAMERA",
+        "android.permission.health.READ_NUTRITION",
+        "android.permission.health.WRITE_NUTRITION",
+        "android.permission.health.READ_WEIGHT",
+        "android.permission.health.WRITE_WEIGHT",
+        "android.permission.health.READ_ACTIVE_CALORIES_BURNED",
+        "android.permission.health.READ_STEPS",
+        "android.permission.health.READ_EXERCISE"
+      ],
+      "intentFilters": [
+        {
+          "action": "androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE",
+          "category": [
+            "DEFAULT"
+          ]
+        },
+        {
+          "action": "android.intent.action.VIEW_PERMISSION_USAGE",
+          "category": [
+            "HEALTH_PERMISSIONS"
+          ]
+        }
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-localization",
+      "expo-font",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Cibus to access your camera to scan food barcodes and nutrition labels."
+        }
+      ]
+    ]
+  }
+}
